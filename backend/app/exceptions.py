@@ -4,3 +4,7 @@ class InvalidCredentialsError(Exception):
 
 class ClinicaInactivaError(Exception):
     """La clinica del usuario no esta en estado 'activa'."""
+
+
+class UsernameYaExisteError(Exception):
+    """Ya existe un Usuario con ese username."""
