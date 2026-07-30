@@ -1,0 +1,15 @@
+# Entornos virtuales y dependencias
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Variables de entorno (contienen secretos locales)
+.env
+backend/.env
+
+# Cache de tests
+.pytest_cache/
+
+# Docker
+docker-compose.override.yml
