@@ -69,3 +69,51 @@ def test_me_sin_token_devuelve_401(client):
     respuesta = client.get("/auth/me")
 
     assert respuesta.status_code == 401
+
+
+def test_login_expone_debe_cambiar_password(client, db_session):
+    _crear_clinica_y_admin(db_session)
+
+    respuesta = client.post(
+        "/auth/login", json={"username": "admin.dental", "password": "clave123"}
+    )
+
+    assert respuesta.json()["usuario"]["debe_cambiar_password"] is True
+
+
+def test_cambiar_password_exitoso(client, db_session):
+    _crear_clinica_y_admin(db_session)
+    login = client.post(
+        "/auth/login", json={"username": "admin.dental", "password": "clave123"}
+    )
+    token = login.json()["access_token"]
+
+    respuesta = client.post(
+        "/auth/cambiar-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password_actual": "clave123", "password_nueva": "clave-nueva-456"},
+    )
+
+    assert respuesta.status_code == 200
+
+    segundo_login = client.post(
+        "/auth/login", json={"username": "admin.dental", "password": "clave-nueva-456"}
+    )
+    assert segundo_login.status_code == 200
+    assert segundo_login.json()["usuario"]["debe_cambiar_password"] is False
+
+
+def test_cambiar_password_actual_incorrecta_devuelve_401(client, db_session):
+    _crear_clinica_y_admin(db_session)
+    login = client.post(
+        "/auth/login", json={"username": "admin.dental", "password": "clave123"}
+    )
+    token = login.json()["access_token"]
+
+    respuesta = client.post(
+        "/auth/cambiar-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password_actual": "mala-clave", "password_nueva": "clave-nueva"},
+    )
+
+    assert respuesta.status_code == 401
