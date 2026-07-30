@@ -21,3 +21,20 @@ def test_verify_password_rechaza_clave_incorrecta():
     hashed = hash_password("clave123")
 
     assert verify_password("otra-clave", hashed) is False
+
+
+def test_generar_password_temporal_tiene_longitud_razonable():
+    from app.security.passwords import generar_password_temporal
+
+    password = generar_password_temporal()
+
+    assert isinstance(password, str)
+    assert len(password) >= 12
+
+
+def test_generar_password_temporal_no_repite_valores():
+    from app.security.passwords import generar_password_temporal
+
+    generadas = {generar_password_temporal() for _ in range(20)}
+
+    assert len(generadas) == 20

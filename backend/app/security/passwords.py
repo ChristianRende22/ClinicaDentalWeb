@@ -1,3 +1,5 @@
+import secrets
+
 from passlib.context import CryptContext
 
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -9,3 +11,7 @@ def hash_password(plain_password: str) -> str:
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     return _pwd_context.verify(plain_password, password_hash)
+
+
+def generar_password_temporal() -> str:
+    return secrets.token_urlsafe(12)
