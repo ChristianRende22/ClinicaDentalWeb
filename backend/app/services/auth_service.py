@@ -7,7 +7,7 @@ from app.exceptions import ClinicaInactivaError, InvalidCredentialsError
 from app.models import EstadoClinica, RolUsuario
 from app.repositories.usuario_repository import UsuarioRepository
 from app.security.jwt import create_access_token
-from app.security.passwords import verify_password
+from app.security.passwords import hash_password, verify_password
 
 
 class AuthService:
@@ -39,3 +39,12 @@ class AuthService:
             "token_type": "bearer",
             "usuario": usuario,
         }
+
+    def cambiar_password(
+        self, usuario, password_actual: str, password_nueva: str
+    ) -> None:
+        if not verify_password(password_actual, usuario.password_hash):
+            raise InvalidCredentialsError()
+        usuario.password_hash = hash_password(password_nueva)
+        usuario.debe_cambiar_password = False
+        self.db.commit()

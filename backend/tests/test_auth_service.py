@@ -82,3 +82,29 @@ def test_login_superadmin_no_requiere_clinica_activa(db_session):
     resultado = AuthService(db_session).login("superadmin", "clave123")
 
     assert resultado["usuario"].rol == RolUsuario.SUPERADMIN
+
+
+def test_cambiar_password_exitoso_actualiza_hash_y_flag(db_session):
+    from app.models import RolUsuario
+    from app.security.passwords import verify_password
+    from app.services.auth_service import AuthService
+
+    clinica = _crear_clinica_activa(db_session)
+    usuario = _crear_usuario(db_session, clinica, "admin.dental", RolUsuario.ADMIN)
+
+    AuthService(db_session).cambiar_password(usuario, "clave123", "clave-nueva-456")
+
+    assert usuario.debe_cambiar_password is False
+    assert verify_password("clave-nueva-456", usuario.password_hash)
+
+
+def test_cambiar_password_con_actual_incorrecta_lanza_invalid_credentials(db_session):
+    from app.exceptions import InvalidCredentialsError
+    from app.models import RolUsuario
+    from app.services.auth_service import AuthService
+
+    clinica = _crear_clinica_activa(db_session)
+    usuario = _crear_usuario(db_session, clinica, "admin.dental", RolUsuario.ADMIN)
+
+    with pytest.raises(InvalidCredentialsError):
+        AuthService(db_session).cambiar_password(usuario, "clave-equivocada", "clave-nueva")
