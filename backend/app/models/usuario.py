@@ -33,6 +33,9 @@ class Usuario(Base):
         nullable=False,
     )
     activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    debe_cambiar_password: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     clinica: Mapped["Clinica | None"] = relationship(back_populates="usuarios")

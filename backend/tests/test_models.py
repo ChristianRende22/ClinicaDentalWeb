@@ -40,3 +40,18 @@ def test_usuario_superadmin_sin_clinica(db_session):
 
     assert superadmin.id_clinica is None
     assert superadmin.clinica is None
+
+
+def test_usuario_debe_cambiar_password_por_defecto(db_session):
+    from app.models import RolUsuario, Usuario
+
+    usuario = Usuario(
+        id_clinica=None,
+        username="nuevo.usuario",
+        password_hash="hash",
+        rol=RolUsuario.ADMIN,
+    )
+    db_session.add(usuario)
+    db_session.commit()
+
+    assert usuario.debe_cambiar_password is True
