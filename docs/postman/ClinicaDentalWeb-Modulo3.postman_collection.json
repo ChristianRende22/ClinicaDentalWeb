@@ -1,0 +1,998 @@
+{
+  "info": {
+    "name": "ClinicaDentalWeb - Modulo 3 (Parametros por clinica)",
+    "description": "Verificacion del Modulo 3: especialidades, consultorios, metodos de pago, horario de atencion y configuracion.\n\nCOMO USARLA:\n1. Levanta el backend (docker compose up -d, o uvicorn).\n2. Asegurate de que exista un superadmin en la base (ver README).\n3. Ajusta las variables de la coleccion si tu superadmin usa otras credenciales.\n4. Corre la carpeta '0. Setup' primero: encadena los tokens automaticamente.\n5. Despues podes correr toda la coleccion con Run Collection: cada request valida su status y su contenido.\n\nLos tokens, el id_clinica y los ids creados se guardan solos en variables de coleccion.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "superadminUsername", "value": "superadmin" },
+    { "key": "superadminPassword", "value": "Superadmin123" },
+    { "key": "tokenSuperadmin", "value": "" },
+    { "key": "tokenAdmin", "value": "" },
+    { "key": "idClinica", "value": "" },
+    { "key": "adminUsername", "value": "" },
+    { "key": "adminPassword", "value": "" },
+    { "key": "idEspecialidad", "value": "" },
+    { "key": "idConsultorio", "value": "" },
+    { "key": "idMetodoPago", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Login superadmin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve access_token', () => pm.expect(body.access_token).to.be.a('string'));",
+                  "pm.test('el rol es superadmin', () => pm.expect(body.usuario.rol).to.eql('superadmin'));",
+                  "pm.test('el superadmin no tiene clinica', () => pm.expect(body.usuario.id_clinica).to.eql(null));",
+                  "pm.collectionVariables.set('tokenSuperadmin', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{superadminUsername}}\",\n  \"password\": \"{{superadminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Guarda el token del superadmin en la variable tokenSuperadmin."
+          }
+        },
+        {
+          "name": "Crear clinica de prueba",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// username unico para poder correr la coleccion varias veces sin chocar con el 409",
+                  "pm.collectionVariables.set('adminUsername', 'admin.' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve la clinica creada', () => pm.expect(body.clinica.id_clinica).to.be.a('number'));",
+                  "pm.test('devuelve una password temporal', () => pm.expect(body.password_temporal).to.be.a('string'));",
+                  "pm.collectionVariables.set('idClinica', body.clinica.id_clinica);",
+                  "pm.collectionVariables.set('adminPassword', body.password_temporal);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenSuperadmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Dental Smiling QA\",\n  \"direccion\": \"Bexhill-on-Sea\",\n  \"telefono\": \"22334455\",\n  \"correo\": \"qa@dentalsmiling.com\",\n  \"admin_username\": \"{{adminUsername}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clinicas",
+              "host": ["{{baseUrl}}"],
+              "path": ["clinicas"]
+            },
+            "description": "Modulo 2. Guarda idClinica y la password temporal del admin."
+          }
+        },
+        {
+          "name": "Login admin de la clinica",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el rol es admin', () => pm.expect(body.usuario.rol).to.eql('admin'));",
+                  "pm.test('pertenece a la clinica creada', () => pm.expect(String(body.usuario.id_clinica)).to.eql(String(pm.collectionVariables.get('idClinica'))));",
+                  "pm.test('debe cambiar la password temporal', () => pm.expect(body.usuario.debe_cambiar_password).to.eql(true));",
+                  "pm.collectionVariables.set('tokenAdmin', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Guarda el token del admin en tokenAdmin. Todo el Modulo 3 se prueba con este token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Especialidades",
+      "item": [
+        {
+          "name": "Crear especialidad",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('recorta los espacios del nombre', () => pm.expect(body.nombre).to.eql('Ortodoncia'));",
+                  "pm.test('nace activa', () => pm.expect(body.activo).to.eql(true));",
+                  "pm.collectionVariables.set('idEspecialidad', body.id_especialidad);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"  Ortodoncia  \"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/especialidades",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"]
+            }
+          }
+        },
+        {
+          "name": "Crear duplicada (distinto casing) -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('el mensaje explica el conflicto', () => pm.expect(pm.response.json().detail).to.include('especialidad'));",
+                  "// VERIFICACION CLAVE contra MySQL: el func.lower() explicito del repositorio.",
+                  "// SQLite es case-sensitive por defecto y MySQL utf8mb4_general_ci no lo es."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"ORTODONCIA\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/especialidades",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"]
+            }
+          }
+        },
+        {
+          "name": "Crear con nombre vacio -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"   \"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/especialidades",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"]
+            }
+          }
+        },
+        {
+          "name": "Listar especialidades",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve una lista', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "pm.test('todas activas', () => pm.response.json().forEach(e => pm.expect(e.activo).to.eql(true)));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"]
+            }
+          }
+        },
+        {
+          "name": "Obtener especialidad por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('es la que creamos', () => pm.expect(String(pm.response.json().id_especialidad)).to.eql(String(pm.collectionVariables.get('idEspecialidad'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades/{{idEspecialidad}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades", "{{idEspecialidad}}"]
+            }
+          }
+        },
+        {
+          "name": "Obtener id inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades", "999999"]
+            }
+          }
+        },
+        {
+          "name": "Actualizar especialidad",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cambio el nombre', () => pm.expect(pm.response.json().nombre).to.eql('Ortodoncia avanzada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ortodoncia avanzada\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/especialidades/{{idEspecialidad}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades", "{{idEspecialidad}}"]
+            }
+          }
+        },
+        {
+          "name": "Eliminar (borrado logico) -> 204",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));",
+                  "pm.test('sin cuerpo', () => pm.expect(pm.response.text()).to.eql(''));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades/{{idEspecialidad}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades", "{{idEspecialidad}}"]
+            }
+          }
+        },
+        {
+          "name": "Listar con inactivos -> la desactivada aparece",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const id = String(pm.collectionVariables.get('idEspecialidad'));",
+                  "const encontrada = pm.response.json().find(e => String(e.id_especialidad) === id);",
+                  "pm.test('la fila sigue existiendo', () => pm.expect(encontrada).to.not.be.undefined);",
+                  "pm.test('quedo inactiva, no borrada', () => pm.expect(encontrada.activo).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades?incluir_inactivos=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"],
+              "query": [{ "key": "incluir_inactivos", "value": "true" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Consultorios",
+      "item": [
+        {
+          "name": "Crear consultorio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idConsultorio', pm.response.json().id_consultorio);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Consultorio 1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/consultorios",
+              "host": ["{{baseUrl}}"],
+              "path": ["consultorios"]
+            }
+          }
+        },
+        {
+          "name": "Crear duplicado -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 409', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"consultorio 1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/consultorios",
+              "host": ["{{baseUrl}}"],
+              "path": ["consultorios"]
+            }
+          }
+        },
+        {
+          "name": "Listar consultorios",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('hay al menos uno', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/consultorios",
+              "host": ["{{baseUrl}}"],
+              "path": ["consultorios"]
+            }
+          }
+        },
+        {
+          "name": "Renombrar consultorio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cambio el nombre', () => pm.expect(pm.response.json().nombre).to.eql('Sala A'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sala A\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/consultorios/{{idConsultorio}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["consultorios", "{{idConsultorio}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Metodos de pago",
+      "item": [
+        {
+          "name": "Crear metodo de pago",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idMetodoPago', pm.response.json().id_metodo_pago);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Efectivo\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/metodos-pago",
+              "host": ["{{baseUrl}}"],
+              "path": ["metodos-pago"]
+            }
+          }
+        },
+        {
+          "name": "Crear segundo metodo de pago",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 201', () => pm.response.to.have.status(201));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Tarjeta\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/metodos-pago",
+              "host": ["{{baseUrl}}"],
+              "path": ["metodos-pago"]
+            }
+          }
+        },
+        {
+          "name": "Listar metodos de pago (ordenados por nombre)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const nombres = pm.response.json().map(m => m.nombre);",
+                  "pm.test('vienen ordenados por nombre', () => pm.expect(nombres).to.eql([...nombres].sort()));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/metodos-pago",
+              "host": ["{{baseUrl}}"],
+              "path": ["metodos-pago"]
+            }
+          }
+        },
+        {
+          "name": "Desactivar metodo de pago -> 204",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 204', () => pm.response.to.have.status(204));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/metodos-pago/{{idMetodoPago}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["metodos-pago", "{{idMetodoPago}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Horario de atencion",
+      "item": [
+        {
+          "name": "GET horarios (7 dias con defaults)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const dias = pm.response.json();",
+                  "pm.test('devuelve los 7 dias en orden', () => pm.expect(dias.map(d => d.dia_semana)).to.eql(['lunes','martes','miercoles','jueves','viernes','sabado','domingo']));",
+                  "pm.test('lunes abierto 08:00-17:00', () => { pm.expect(dias[0].hora_apertura).to.eql('08:00:00'); pm.expect(dias[0].hora_cierre).to.eql('17:00:00'); pm.expect(dias[0].cerrado).to.eql(false); });",
+                  "pm.test('sabado y domingo cerrados por defecto', () => { pm.expect(dias[5].cerrado).to.eql(true); pm.expect(dias[6].cerrado).to.eql(true); });",
+                  "pm.test('los dias cerrados no traen horas', () => pm.expect(dias[6].hora_apertura).to.eql(null));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/horarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["horarios"]
+            },
+            "description": "Con la tabla vacia devuelve los defaults de HORARIO_POR_DEFECTO sin persistirlos."
+          }
+        },
+        {
+          "name": "PUT horarios (sabado 08:00-12:00)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const dias = pm.response.json();",
+                  "pm.test('el sabado quedo abierto hasta las 12', () => { pm.expect(dias[5].cerrado).to.eql(false); pm.expect(dias[5].hora_cierre).to.eql('12:00:00'); });",
+                  "// VERIFICACION CLAVE contra MySQL: el tipo Time y el ENUM dia_semana en minuscula."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias\": [\n    { \"dia_semana\": \"lunes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"martes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"miercoles\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"jueves\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"viernes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"sabado\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"12:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"domingo\", \"hora_apertura\": null, \"hora_cierre\": null, \"cerrado\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/horarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["horarios"]
+            }
+          }
+        },
+        {
+          "name": "GET horarios (confirma lo guardado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const dias = pm.response.json();",
+                  "pm.test('el sabado persistio', () => pm.expect(dias[5].hora_cierre).to.eql('12:00:00'));",
+                  "pm.test('el domingo sigue cerrado', () => pm.expect(dias[6].cerrado).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/horarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["horarios"]
+            }
+          }
+        },
+        {
+          "name": "PUT horarios con cierre antes de apertura -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias\": [\n    { \"dia_semana\": \"lunes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"07:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"martes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"miercoles\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"jueves\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"viernes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"sabado\", \"hora_apertura\": null, \"hora_cierre\": null, \"cerrado\": true },\n    { \"dia_semana\": \"domingo\", \"hora_apertura\": null, \"hora_cierre\": null, \"cerrado\": true }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/horarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["horarios"]
+            }
+          }
+        },
+        {
+          "name": "PUT horarios con 5 dias -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias\": [\n    { \"dia_semana\": \"lunes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"martes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"miercoles\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"jueves\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false },\n    { \"dia_semana\": \"viernes\", \"hora_apertura\": \"08:00:00\", \"hora_cierre\": \"17:00:00\", \"cerrado\": false }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/horarios",
+              "host": ["{{baseUrl}}"],
+              "path": ["horarios"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Configuracion",
+      "item": [
+        {
+          "name": "GET configuracion (se crea al vuelo)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('duracion de cita 30 min', () => pm.expect(c.duracion_cita_minutos).to.eql(30));",
+                  "pm.test('IVA 13.00 (El Salvador)', () => pm.expect(Number(c.porcentaje_impuesto)).to.eql(13));",
+                  "pm.test('prefijo de factura F', () => pm.expect(c.prefijo_factura).to.eql('F'));",
+                  "pm.test('proximo numero de factura 1', () => pm.expect(c.proximo_numero_factura).to.eql(1));",
+                  "pm.test('24 h para cambiar una cita', () => pm.expect(c.horas_minimas_cambio_cita).to.eql(24));",
+                  "pm.test('3 dias minimos para reagendar', () => pm.expect(c.dias_minimos_reagendamiento).to.eql(3));",
+                  "// VERIFICACION CLAVE contra MySQL: el tipo Numeric(5,2) del impuesto."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion",
+              "host": ["{{baseUrl}}"],
+              "path": ["configuracion"]
+            },
+            "description": "Es la unica lectura del modulo que escribe: si la clinica no tiene configuracion, la crea con los defaults."
+          }
+        },
+        {
+          "name": "PUT configuracion (parcial)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('cambio la duracion de cita', () => pm.expect(c.duracion_cita_minutos).to.eql(45));",
+                  "pm.test('lo que no se envio quedo igual', () => pm.expect(Number(c.porcentaje_impuesto)).to.eql(13));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"duracion_cita_minutos\": 45\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/configuracion",
+              "host": ["{{baseUrl}}"],
+              "path": ["configuracion"]
+            }
+          }
+        },
+        {
+          "name": "PUT dias_minimos_reagendamiento 0 -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));",
+                  "// La regla es configurable en intensidad pero NO desactivable: el minimo es 1."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dias_minimos_reagendamiento\": 0\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/configuracion",
+              "host": ["{{baseUrl}}"],
+              "path": ["configuracion"]
+            }
+          }
+        },
+        {
+          "name": "PUT duracion_cita_minutos 481 -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 422', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"duracion_cita_minutos\": 481\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/configuracion",
+              "host": ["{{baseUrl}}"],
+              "path": ["configuracion"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Aislamiento entre clinicas",
+      "item": [
+        {
+          "name": "Superadmin sin X-Clinica-Id -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el mensaje pide el header', () => pm.expect(pm.response.json().detail).to.include('X-Clinica-Id'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenSuperadmin}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"]
+            },
+            "description": "resolve_clinica_id exige que el superadmin indique sobre que clinica opera."
+          }
+        },
+        {
+          "name": "Superadmin con X-Clinica-Id -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ve las especialidades de esa clinica', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tokenSuperadmin}}" },
+              { "key": "X-Clinica-Id", "value": "{{idClinica}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/especialidades?incluir_inactivos=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["especialidades"],
+              "query": [{ "key": "incluir_inactivos", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Sin token -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 401', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/configuracion",
+              "host": ["{{baseUrl}}"],
+              "path": ["configuracion"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # Contexto del Proyecto — ClinicaDentalWeb
 
-**Para:** Meli (y su asistente de IA), para continuar con los Módulos 3, 4 y 5.
-**Última actualización:** 2026-07-30 — Módulos 1 y 2 completos y en `main`.
+**Para:** Meli (y su asistente de IA), para continuar con los Módulos 4 y 5.
+**Última actualización:** 2026-07-31 — Módulos 1, 2 y 3 completos.
 
 Este documento resume todo lo que existe hasta ahora: qué se decidió, por qué, cómo está
 armado el código, y qué convenciones hay que seguir para que los módulos nuevos encajen sin
@@ -27,6 +27,9 @@ independiente, con un superadministrador que las gestiona a todas.
   tarea del Módulo 1.
 - `docs/superpowers/specs/2026-07-30-modulo-2-panel-superadmin-design.md` — spec del Módulo 2.
 - `docs/superpowers/plans/2026-07-30-modulo-2-panel-superadmin-plan.md` — plan TDD del Módulo 2.
+- `docs/superpowers/specs/2026-07-31-modulo-3-parametros-clinica-design.md` — spec del Módulo 3,
+  incluye la tabla de decisiones de modelado con su justificación.
+- `docs/superpowers/plans/2026-07-31-modulo-3-parametros-clinica-plan.md` — plan TDD del Módulo 3.
 
 Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 (`docs/superpowers/specs/YYYY-MM-DD-modulo-N-<nombre>-design.md` y el equivalente en `plans/`).
@@ -39,8 +42,8 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 |---|---|---|---|
 | 1 | Tenancy + Auth core (`Clinica`, `Usuario`, JWT, bcrypt, aislamiento por clínica) | Christian | ✅ Completo |
 | 2 | Panel superadministrador (CRUD clínicas, admin principal, feature flags) | Christian | ✅ Completo |
-| 3 | Parámetros por clínica (`Especialidad`, `Consultorio`, horarios, precios) | **Meli** | ⬜ Siguiente |
-| 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ⬜ Pendiente |
+| 3 | Parámetros por clínica (`Especialidad`, `Consultorio`, `MetodoPago`, horario de atención, configuración) | **Meli** | ✅ Completo |
+| 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ⬜ Siguiente |
 | 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, recetas) | **Meli** | ⬜ Pendiente |
 | 6 | Facturación extendida | Christian | ⬜ Pendiente |
 | 7 | Dashboards y métricas | Christian | ⬜ Pendiente |
@@ -88,7 +91,7 @@ ClinicaDentalWeb/
     alembic.ini
     alembic/
       env.py
-      versions/                  (0001_..., 0002_..., etc. -- nunca edites una ya aplicada)
+      versions/                  (0001_..., 0002_..., 0003_..., -- nunca edites una ya aplicada)
     app/
       config.py                  (Settings, lee de .env)
       db.py                      (engine, SessionLocal, get_db)
@@ -99,6 +102,7 @@ ClinicaDentalWeb/
         passwords.py               (hash_password, verify_password, generar_password_temporal)
         jwt.py                      (create_access_token, decode_access_token, TokenError)
       repositories/                (acceso a datos, ver seccion de convenciones)
+                                   catalogo_repository.py = CRUD compartido de catalogos (Modulo 3)
       services/                    (logica de negocio que orquesta repositorios)
       schemas/                     (Pydantic: un archivo por dominio, ej. auth.py, clinica.py)
       api/
@@ -195,6 +199,75 @@ son exactamente el caso para el que se diseñó.
   respuesta de `/auth/login` y `/auth/me`, se pone en `False` vía
   `POST /auth/cambiar-password`. El backend **no** bloquea otros endpoints mientras el flag esté
   en `True` — es responsabilidad del frontend redirigir a la pantalla de cambio de password.
+
+---
+
+## 6bis. Qué existe ya — Módulo 3 (Parámetros por Clínica)
+
+**Modelos** (`app/models/parametros.py`, migración `0003`):
+- `Especialidad`, `Consultorio`, `MetodoPago` — los tres catálogos comparten exactamente la misma
+  forma: `id` propia, `id_clinica` (FK), `nombre` (`VARCHAR(50)`), `activo` (bool). Unicidad
+  `(id_clinica, nombre)`: dos clínicas pueden tener ambas "Ortodoncia", la misma clínica no.
+- `HorarioClinica` — horario de atención, **una fila por día**. Llave compuesta
+  `(id_clinica, dia_semana)`. `hora_apertura`/`hora_cierre` son nullable (para los días cerrados)
+  y `cerrado: bool` es explícito.
+- `ConfiguracionClinica` — 1:1 con `Clinica` (`id_clinica` es PK **y** FK, así el esquema mismo
+  impide dos configuraciones). Campos: `duracion_cita_minutos` (30), `porcentaje_impuesto`
+  (`13.00`, IVA de El Salvador), `prefijo_factura` (`"F"`), `proximo_numero_factura` (1),
+  `horas_minimas_cambio_cita` (24), `dias_minimos_reagendamiento` (3).
+- `DiaSemana` — enum nuevo con `values_callable` (bug #2). Valores sin tilde: `miercoles`,
+  `sabado`.
+- `HORARIO_POR_DEFECTO` — constante con los 7 días: L-V abierto 08:00–17:00, sábado y domingo
+  cerrados. **Única fuente de verdad** de esos defaults; la usan la ruta y los tests.
+
+**`CatalogoRepository[T]` (`app/repositories/catalogo_repository.py`) — leelo antes de agregar
+cualquier catálogo nuevo.** Hereda de `BaseRepository` e implementa **una sola vez** el CRUD de
+los catálogos por clínica: filtro por `id_clinica`, nombre único (case-insensitive con
+`func.lower()` explícito, contando los inactivos), borrado lógico y `listar(..., incluir_inactivos)`.
+Los tres repos concretos son de dos líneas:
+
+```python
+class EspecialidadRepository(CatalogoRepository[Especialidad]):
+    model = Especialidad
+```
+
+Si en tu módulo aparece otro catálogo por clínica (`TipoTratamiento`, etc.), heredá de acá en vez
+de escribir el CRUD de nuevo.
+
+**Dos repositorios más que NO heredan de `BaseRepository`** (misma lógica que las excepciones ya
+documentadas): `HorarioClinicaRepository` (llave compuesta con un enum) y
+`ConfiguracionClinicaRepository` (relación 1:1, la PK *es* `id_clinica`). Ambos igual exigen
+`id_clinica` como primer parámetro.
+
+**Endpoints** — `/especialidades`, `/consultorios`, `/metodos-pago` (CRUD completo, `DELETE`
+desactiva y devuelve `204`), `GET`/`PUT /horarios`, `GET`/`PUT /configuracion`.
+
+**Permisos del módulo, una sola regla sin excepciones: los 4 roles leen, solo `admin` y
+`superadmin` escriben.** Cada router declara dos constantes (`LECTURA` y `ESCRITURA`) y las aplica
+por endpoint, no a nivel de router.
+
+**Este módulo es el primer consumidor de `resolve_clinica_id`.** Ningún endpoint recibe
+`id_clinica` por URL ni por body: sale del JWT, o del header `X-Clinica-Id` si es superadmin.
+Copiá ese patrón en los Módulos 4 en adelante.
+
+**Dos comportamientos que sorprenden si no los sabés:**
+- `GET /configuracion` **escribe**: si la clínica no tiene configuración, la crea con los defaults.
+  Se decidió así para no tocar `ClinicaService` (Módulo 2) ni migrar las clínicas preexistentes.
+- `GET /horarios` **no** escribe: devuelve siempre los 7 días, rellenando con
+  `HORARIO_POR_DEFECTO` los que no tengan fila. `PUT /horarios` reemplaza la semana completa
+  (los 7 días en un solo request) y valida todos los días antes de escribir ninguno.
+
+**Excepciones nuevas** en `app/exceptions.py`: `NombreDuplicadoEnClinicaError` (→ `409`) y
+`HorarioInvalidoError` (→ `422`).
+
+**Lo que este módulo habilita:** en el Módulo 4, `Doctor.id_especialidad` y `Cita.id_consultorio`
+como FK, la validación de que una cita caiga dentro del horario de atención, y las reglas de
+cambio de cita. En el Módulo 6, `Factura.id_metodo_pago`, el impuesto y la numeración.
+
+**Hueco conocido y decidido a conciencia:** un paciente puede cancelar con 24 h de anticipación y
+reservar una cita nueva para mañana, esquivando la regla de los 3 días de reagendamiento.
+Cerrarlo exigiría una anticipación mínima también para las reservas nuevas — queda como decisión
+del Módulo 4.
 
 ---
 
