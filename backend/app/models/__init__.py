@@ -1,4 +1,10 @@
 from app.models.base import Base
+from app.models.cita import (
+    ESTADOS_ACTIVOS,
+    TRANSICIONES_PERMITIDAS,
+    Cita,
+    EstadoCita,
+)
 from app.models.clinica import Clinica, ClinicaModulo, EstadoClinica
 from app.models.parametros import (
     HORARIO_POR_DEFECTO,
@@ -9,6 +15,7 @@ from app.models.parametros import (
     HorarioClinica,
     MetodoPago,
 )
+from app.models.personas import Asistente, Doctor, HorarioDoctor, Paciente
 from app.models.usuario import RolUsuario, Usuario
 
 __all__ = [
@@ -25,4 +32,12 @@ __all__ = [
     "HorarioClinica",
     "ConfiguracionClinica",
     "HORARIO_POR_DEFECTO",
+    "Paciente",
+    "Doctor",
+    "Asistente",
+    "HorarioDoctor",
+    "Cita",
+    "EstadoCita",
+    "TRANSICIONES_PERMITIDAS",
+    "ESTADOS_ACTIVOS",
 ]

@@ -135,3 +135,30 @@ def test_doctor_y_asistente_leen_la_configuracion_pero_no_la_editan(
     assert client.put(
         "/configuracion", headers=_auth(token), json={"duracion_cita_minutos": 45}
     ).status_code == 403
+
+
+def test_la_configuracion_incluye_la_anticipacion_minima_con_default_24(client, db_session):
+    from app.models import RolUsuario
+
+    clinica = _clinica(db_session)
+    token = _token_para(db_session, RolUsuario.ADMIN, clinica.id_clinica, "admin.a")
+
+    respuesta = client.get("/configuracion", headers=_auth(token))
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["anticipacion_minima_reserva_horas"] == 24
+
+
+def test_la_anticipacion_minima_no_se_puede_poner_en_cero(client, db_session):
+    from app.models import RolUsuario
+
+    clinica = _clinica(db_session)
+    token = _token_para(db_session, RolUsuario.ADMIN, clinica.id_clinica, "admin.a")
+
+    respuesta = client.put(
+        "/configuracion",
+        headers=_auth(token),
+        json={"anticipacion_minima_reserva_horas": 0},
+    )
+
+    assert respuesta.status_code == 422

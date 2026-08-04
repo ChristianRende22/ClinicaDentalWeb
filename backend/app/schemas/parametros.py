@@ -88,6 +88,7 @@ class ConfiguracionResponse(BaseModel):
     proximo_numero_factura: int
     horas_minimas_cambio_cita: int
     dias_minimos_reagendamiento: int
+    anticipacion_minima_reserva_horas: int
 
     model_config = {"from_attributes": True}
 
@@ -106,3 +107,4 @@ class ConfiguracionUpdateRequest(BaseModel):
     proximo_numero_factura: int | None = Field(default=None, ge=1)
     horas_minimas_cambio_cita: int | None = Field(default=None, ge=1, le=720)
     dias_minimos_reagendamiento: int | None = Field(default=None, ge=1, le=90)
+    anticipacion_minima_reserva_horas: int | None = Field(default=None, ge=1, le=720)

@@ -30,6 +30,12 @@ independiente, con un superadministrador que las gestiona a todas.
 - `docs/superpowers/specs/2026-07-31-modulo-3-parametros-clinica-design.md` — spec del Módulo 3,
   incluye la tabla de decisiones de modelado con su justificación.
 - `docs/superpowers/plans/2026-07-31-modulo-3-parametros-clinica-plan.md` — plan TDD del Módulo 3.
+- `docs/superpowers/specs/2026-08-02-modulo-4-operacion-clinica-design.md` — spec del Módulo 4,
+  incluye la máquina de estados de la cita y la justificación del diseño de validadores.
+- `docs/superpowers/plans/2026-08-02-modulo-4-operacion-clinica-plan.md` — plan TDD del Módulo 4.
+  **Leé el apéndice del final:** registra los cinco defectos críticos que encontraron las revisiones
+  de código, todos fallas del plan y no de la implementación. Es la parte más instructiva del
+  documento.
 
 Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 (`docs/superpowers/specs/YYYY-MM-DD-modulo-N-<nombre>-design.md` y el equivalente en `plans/`).
@@ -43,8 +49,8 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 | 1 | Tenancy + Auth core (`Clinica`, `Usuario`, JWT, bcrypt, aislamiento por clínica) | Christian | ✅ Completo |
 | 2 | Panel superadministrador (CRUD clínicas, admin principal, feature flags) | Christian | ✅ Completo |
 | 3 | Parámetros por clínica (`Especialidad`, `Consultorio`, `MetodoPago`, horario de atención, configuración) | **Meli** | ✅ Completo |
-| 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ⬜ Siguiente |
-| 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, recetas) | **Meli** | ⬜ Pendiente |
+| 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ✅ Completo |
+| 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, recetas) | **Meli** | ⬜ Siguiente |
 | 6 | Facturación extendida | Christian | ⬜ Pendiente |
 | 7 | Dashboards y métricas | Christian | ⬜ Pendiente |
 | 8 | Notificaciones y recordatorios | Sin asignar | ⬜ Pendiente |
@@ -271,6 +277,152 @@ del Módulo 4.
 
 ---
 
+## 6ter. Qué existe ya — Módulo 4 (Operación Clínica Básica)
+
+**Modelos** (`app/models/personas.py` y `app/models/cita.py`, migración `0004`):
+
+- `Paciente` — `id_paciente`, `id_clinica`, `nombre`, `apellido`, `fecha_nacimiento` (nullable),
+  `telefono` (`varchar15`), `correo` (`varchar100`, nullable), `direccion`, `activo`, `created_at`.
+  **Sin `id_usuario`:** el paciente no se loguea, es una ficha que la clínica opera en su nombre.
+  **La edad no se almacena**, se calcula desde `fecha_nacimiento` y se expone en el schema de
+  respuesta — guardarla la volvería mentira al día siguiente del cumpleaños.
+- `Doctor` y `Asistente` — 1:1 con `Usuario` (`id_usuario` FK **única y no nula**, como manda el ERD
+  to-be). `Doctor` agrega `id_especialidad` (FK a `Especialidad` del Módulo 3, **nullable**: una
+  clínica recién creada no tiene el catálogo cargado y exigirla bloquearía el alta del primer doctor).
+- `HorarioDoctor` — bloques de disponibilidad semanal. **PK propia, no compuesta** como
+  `HorarioClinica`: un doctor atiende de 08:00 a 12:00, almuerza, y vuelve de 14:00 a 18:00. Unicidad
+  `(id_doctor, dia_semana, hora_inicio)`. Reutiliza el enum `DiaSemana` del Módulo 3. No lleva
+  `id_clinica`: se deduce del doctor, y el aislamiento lo garantiza el repositorio con un join.
+- `Cita` — `id_paciente`, `id_doctor`, `id_consultorio` (nullable), `id_asistente` (nullable, quién
+  la agendó), `fecha_hora`, `duracion_minutos`, `estado`, `motivo`, `veces_reagendada`. Sin
+  `id_tratamiento`: eso es Módulo 5/6.
+- `EstadoCita` — `programada`, `confirmada`, `completada`, `cancelada`, `no_asistio`. Con
+  `values_callable`, como todos los enums del proyecto.
+- `ConfiguracionClinica` gana `anticipacion_minima_reserva_horas` (default 24, rango 1–720).
+
+**Dos decisiones de modelado que conviene no revertir:**
+
+- **`Cita.duracion_minutos` se guarda, no se deriva de la configuración.** Es una foto del momento en
+  que se agendó. Si se leyera de `ConfiguracionClinica` al mostrar la cita, cambiar la duración por
+  defecto movería retroactivamente todas las citas ya agendadas y podría hacerlas chocar entre sí.
+- **`veces_reagendada` en vez de un estado `reagendada`.** Reagendar es una transición, no una
+  situación: un estado `reagendada` no responde "¿está confirmada o no?" y habría que acordarse de
+  incluirlo en cada filtro de agenda activa.
+
+**Alta y baja del personal — `PersonalService`.** Un solo `POST` crea el `Usuario` y el perfil en una
+transacción, con `try` / `except` y `db.rollback()` explícito, copiando
+`ClinicaService.crear_clinica_con_admin`. Devuelve la password temporal **una sola vez**; ningún
+`GET` la expone. Es el **único** servicio del módulo que hace `commit()`.
+
+`_cambiar_actividad` mueve la actividad del perfil **y la del `Usuario` juntas, en los dos
+sentidos**: un profesional dado de baja no debe poder entrar al sistema, y uno reactivado tiene que
+poder. Si se movieran por separado quedaría un doctor que aparece en los listados y al que se le
+pueden agendar citas, pero que no puede loguearse.
+
+Por eso el `PUT /doctores/{id}` y el `PUT /asistentes/{id}` **no** aplican `activo` con `setattr`:
+lo sacan del body y lo delegan en el servicio. Y lo hacen **al final**, después de que el resto de la
+actualización funcionó, porque el servicio commitea adentro: si se resolviera primero y después
+fallara algo, la baja quedaría aplicada y el cliente recibiría un error creyendo que no se aplicó
+nada. Un solo commit por request.
+
+`PUT /pacientes/{id}` es distinto y conviene no confundirlos: ahí `activo` **sí** se aplica con
+`setattr`, porque `Paciente` no tiene `Usuario` asociado y no hay nada que mantener sincronizado. Lo
+que ese endpoint sí chequea a mano es el **permiso**: `activo` en el body exige un rol con permiso de
+baja (`ROLES_BAJA`), porque los roles que pueden editar un paciente son más que los que pueden darlo
+de baja.
+
+**El diseño de validadores — leelo antes de tocar el agendamiento.** Agendar una cita tiene siete
+reglas. En vez de siete `if` dentro de `CitaService`, **cada regla es un objeto independiente** en
+`app/services/validadores_cita.py` con la interfaz `validar(ctx: ContextoCita) -> None` que lanza su
+excepción de dominio. `CitaService` recorre la lista y **corta en el primero que falla**.
+
+Los siete, en orden: referencias de la misma clínica, no en el pasado, anticipación mínima, dentro
+del horario de la clínica, dentro del horario del doctor, sin choque de doctor, sin choque de
+consultorio.
+
+Tres consecuencias que valen para el Módulo 5:
+
+- Cada regla se testea **sin base de datos y sin servicio**: se arma un `ContextoCita` a mano y se le
+  pasan dobles a los validadores que consultan.
+- Agregar una regla es un archivo nuevo más un renglón en `validadores_por_defecto`, **no** editar
+  `CitaService`. Mismo criterio con el que el Módulo 3 justificó `MetodoPago` como tabla en vez de
+  columnas booleanas: extender es dato o composición, no modificación.
+- `ContextoCita.excluir_id_cita` hace que los mismos siete sirvan para crear y para reagendar: al
+  reagendar se excluye la propia cita del chequeo de choques, si no chocaría contra sí misma.
+
+**Máquina de estados.** `TRANSICIONES_PERMITIDAS` (en `app/models/cita.py`) es la **única** fuente de
+verdad, y expresa "terminal" como conjunto vacío. `programada → confirmada | cancelada`;
+`confirmada → completada | no_asistio | cancelada`; las otras tres son terminales. Solo se completa o
+se marca ausente desde `confirmada`.
+
+**Reagendar queda deliberadamente fuera de esa tabla:** no es una transición de estado sino un
+movimiento de datos. Mueve la fila (misma `id_cita`), incrementa `veces_reagendada` y **resetea** el
+estado a `programada`, porque la confirmación era para la hora vieja.
+
+**`cambiar_estado` delega en `cancelar()` cuando el estado pedido es `cancelada`.** No es un detalle
+de estilo: la tabla permite `programada → cancelada`, así que sin la delegación cualquiera podría
+cancelar sobre la hora por esa vía y `horas_minimas_cambio_cita` quedaría decorativa.
+
+**Endpoints.** `/pacientes`, `/doctores`, `/asistentes` (CRUD, `DELETE` da de baja lógica),
+`GET`/`PUT /doctores/{id}/horarios` (reemplaza la semana completa), y `/citas` con `GET`, `POST`,
+`GET /{id}`, `PATCH /{id}/estado`, `PATCH /{id}/cancelar` y `PATCH /{id}/reagendar`. **No hay
+`DELETE /citas`**: una cita no se borra, se cancela — borrarla perdería el registro que el historial
+del paciente y las métricas del Módulo 7 necesitan.
+
+**Permisos — este módulo rompe a propósito la regla única del Módulo 3.** Aquel era configuración de
+la clínica; esto es la operación diaria, y una asistente que no puede registrar un paciente ni
+agendar una cita no puede hacer su trabajo. La regla que la reemplaza es igual de enunciable: **quien
+ejecuta la operación en el mundo real puede registrarla en el sistema; quien administra la clínica
+define quién trabaja en ella.**
+
+| Recurso | Leer | Crear / editar | Dar de baja |
+|---|---|---|---|
+| Pacientes | los 4 roles | superadmin, admin, asistente, doctor | superadmin, admin |
+| Doctores, asistentes | los 4 roles | superadmin, admin | superadmin, admin |
+| Horario de un doctor | los 4 roles | superadmin, admin, y el propio doctor sobre el suyo | — |
+| Citas | admin y asistente: todas. **Doctor: solo las suyas** | superadmin, admin, asistente | — (se cancela) |
+| Estado de una cita | — | superadmin, admin, asistente, y el doctor de esa cita | — |
+
+**El filtro del doctor sobre las citas es un `WHERE`, no un `403`.** `GET /citas` le inyecta
+`id_doctor = <el suyo>` ignorando el que venga por query string, y una cita ajena por id devuelve
+**404** — un 403 le confirmaría que existe, y eso ya es información sobre un paciente que no atiende.
+
+**Y el chequeo se hace por rol, no por "tiene perfil".** `get_doctor_actual` devuelve `None` tanto
+para "no es doctor" como para "es doctor sin fila `Doctor`", así que decidir por `is not None` hacía
+que un doctor sin perfil viera **todas** las citas de la clínica. La falla tiene que cerrar, no
+abrir. Si en el Módulo 5 agregás una vista filtrada por doctor, copiá este patrón, no el ingenuo.
+
+**Excepciones nuevas** en `app/exceptions.py`: `ReferenciaInvalidaError`, `CitaEnElPasadoError`,
+`AnticipacionInsuficienteError`, `FueraDeHorarioClinicaError`, `DoctorNoDisponibleError`,
+`ChoqueDeCitaError` y `TransicionInvalidaError`. Traducción: los conflictos con el estado del sistema
+van a **409** (`ChoqueDeCitaError`, `TransicionInvalidaError`), las violaciones de una regla sobre los
+datos enviados a **422**.
+
+**Qué se tocó de los Módulos 1 a 3**, y nada más: `app/api/deps.py` (se agregó `get_doctor_actual`),
+y `app/models/parametros.py` más `app/schemas/parametros.py` (la columna nueva
+`anticipacion_minima_reserva_horas`). No se tocó `ClinicaService`, `AuthService`,
+`MODULOS_DISPONIBLES` ni ninguna migración ya aplicada.
+
+**Helpers de test compartidos.** `tests/factories.py` (nuevo) trae `crear_clinica`, `crear_usuario`,
+`token_de`, `auth`, `crear_paciente`, `crear_doctor`, `crear_asistente` y `crear_cita`. Usalos en el
+Módulo 5 en vez de volver a copiar el bloque en cada archivo de test.
+
+**Verificación contra el backend real:** `docs/postman/ClinicaDentalWeb-Modulo4.postman_collection.json`,
+7 carpetas y 48 requests, ejecutable de punta a punta con Run Collection.
+
+**Lo que este módulo habilita:** en el Módulo 5, `HistorialMedico.id_paciente`, los odontogramas y
+planes de tratamiento colgando de `Paciente`, y `Tratamiento.id_doctor` (la FK `Cita.id_tratamiento`
+se agrega ahí con una migración de una columna). En el 6, `Factura.id_paciente` y
+`Factura.id_asistente`. En el 7, las métricas de citas por estado, doctor y rango — `CitaRepository.listar`
+ya devuelve todo lo que necesitan. En el 8, los recordatorios sobre `Cita.fecha_hora`.
+
+**Deuda conocida y decidida a conciencia:** el hueco de reagendamiento del Módulo 3 sigue abierto (ver
+sección 11 del spec del Módulo 4), y no hay forma de regenerar una password temporal perdida — eso es
+[BE-09 en Notion](https://app.notion.com/p/3b0a9ad7882681f7a53ec475508452ff), ticket aparte porque el
+arreglo correcto cubre a los cuatro roles y es territorio de auth.
+
+---
+
 ## 7. Convenciones a seguir (importante para que tu código encaje)
 
 1. **TDD siempre:** test primero (RED, falla por la razón correcta), después la implementación
@@ -318,6 +470,24 @@ del Módulo 4.
    `models/usuario.py`). Esto NO se detecta en tests con SQLite (que no tiene ENUM nativo) —
    **solo revienta contra MySQL real**. Si agregás un enum nuevo en tu módulo, aplicá el mismo
    patrón desde el principio.
+3. **Un índice que está en la migración y no en el modelo es una divergencia silenciosa.** Los tests
+   corren sobre `Base.metadata.create_all()`, así que validan el esquema del **modelo**; producción
+   corre el de la **migración**. Si los dos no coinciden, los tests pasan sobre un esquema que no
+   existe. Apareció con `ix_cita_doctor_fecha` en el Módulo 4. Mismo criterio para el nombre de los
+   constraints: si la migración le pone nombre a un `UniqueConstraint`, el modelo también, o
+   `alembic --autogenerate` va a marcar una diferencia falsa.
+4. **Un campo que viaja en el body de un `PUT` esquiva la matriz de permisos.** Los repositorios
+   aplican `data` con `setattr`, así que cualquier campo del schema `Update` es escribible por quien
+   tenga permiso de edición — aunque ese campo represente una acción que su rol no tiene. Pasó dos
+   veces en el Módulo 4: `{"activo": false}` en `PUT /pacientes` era una puerta trasera al `DELETE`,
+   y `{"id_especialidad": <de otra clínica>}` en `PUT /doctores` esquivaba la validación que sí hace
+   el `POST`. **Si un campo de un `Update` tiene una regla de negocio o un permiso propio, chequealo
+   en la ruta o delegalo al servicio; no alcanza con que el schema lo acepte.**
+5. **Una dependencia que devuelve `None` por dos motivos distintos hace fallar el sistema abierto.**
+   `get_doctor_actual` devuelve `None` tanto para "no es doctor" como para "es doctor sin fila
+   `Doctor`", y el filtro de citas decidía con `is not None` — así que un doctor sin perfil pasaba a
+   ver **todas** las citas de la clínica en vez de ninguna. Cuando un chequeo de permisos dependa de
+   que algo exista, decidí por el **rol** y hacé que la ausencia cierre, no que abra.
 
 ---
 

@@ -123,6 +123,13 @@ class ConfiguracionClinica(Base):
     dias_minimos_reagendamiento: Mapped[int] = mapped_column(
         Integer, default=3, server_default="3"
     )
+    #: Anticipacion minima para CREAR una cita nueva. Minimo 1 y no 0, igual que
+    #: los otros dos parametros de cambio de cita: la regla es configurable en
+    #: intensidad pero no desactivable. El default de 24 refleja la practica de
+    #: las clinicas dentales salvadorenas, donde no se atiende sin cita previa.
+    anticipacion_minima_reserva_horas: Mapped[int] = mapped_column(
+        Integer, default=24, server_default="24"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )

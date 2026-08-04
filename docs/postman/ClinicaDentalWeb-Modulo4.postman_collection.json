@@ -1,0 +1,2275 @@
+{
+  "info": {
+    "name": "ClinicaDentalWeb - Modulo 4 (Operacion clinica basica)",
+    "description": "Verificacion del Modulo 4: pacientes, doctores, asistentes, horarios por doctor y citas.\n\nCOMO USARLA:\n1. Levanta el backend contra MySQL (docker compose up -d).\n2. Asegurate de que exista un superadmin en la base (ver README).\n3. Ajusta las variables de la coleccion si tu superadmin usa otras credenciales.\n4. Corre la carpeta '0. Setup' primero: encadena los tokens automaticamente.\n5. Despues podes correr toda la coleccion con Run Collection, en orden: cada carpeta consume ids que crea la anterior.\n\nEl prerequest de nivel coleccion calcula las fechas de citas relativas a 'hoy' para que la coleccion no se venza.\n\nLos tokens, el id_clinica y los ids creados se guardan solos en variables de coleccion.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const proximoDiaHabil = (diasDesdeHoy, hora) => {",
+          "  const fecha = new Date();",
+          "  fecha.setDate(fecha.getDate() + diasDesdeHoy);",
+          "  while (fecha.getDay() === 0 || fecha.getDay() === 6) {",
+          "    fecha.setDate(fecha.getDate() + 1);",
+          "  }",
+          "  fecha.setHours(hora, 0, 0, 0);",
+          "  const pad = (n) => String(n).padStart(2, '0');",
+          "  return `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}` +",
+          "         `T${pad(fecha.getHours())}:00:00`;",
+          "};",
+          "",
+          "pm.collectionVariables.set('fechaCita', proximoDiaHabil(7, 9));",
+          "pm.collectionVariables.set('fechaReagenda', proximoDiaHabil(21, 10));",
+          "pm.collectionVariables.set('fechaTemprana', proximoDiaHabil(7, 6));",
+          "pm.collectionVariables.set('fechaPasada', '2020-01-01T09:00:00');",
+          "pm.collectionVariables.set('fechaManana', proximoDiaHabil(1, 9));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "superadminUsername",
+      "value": "superadmin"
+    },
+    {
+      "key": "superadminPassword",
+      "value": "Superadmin123"
+    },
+    {
+      "key": "tokenSuperadmin",
+      "value": ""
+    },
+    {
+      "key": "tokenAdmin",
+      "value": ""
+    },
+    {
+      "key": "idClinica",
+      "value": ""
+    },
+    {
+      "key": "adminUsername",
+      "value": ""
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "idPaciente",
+      "value": ""
+    },
+    {
+      "key": "idDoctor",
+      "value": ""
+    },
+    {
+      "key": "idAsistente",
+      "value": ""
+    },
+    {
+      "key": "idCita",
+      "value": ""
+    },
+    {
+      "key": "doctorUsername",
+      "value": "dra.perez"
+    },
+    {
+      "key": "doctorPassword",
+      "value": ""
+    },
+    {
+      "key": "tokenDoctor",
+      "value": ""
+    },
+    {
+      "key": "fechaCita",
+      "value": ""
+    },
+    {
+      "key": "fechaReagenda",
+      "value": ""
+    },
+    {
+      "key": "fechaTemprana",
+      "value": ""
+    },
+    {
+      "key": "fechaPasada",
+      "value": ""
+    },
+    {
+      "key": "fechaManana",
+      "value": ""
+    },
+    {
+      "key": "idCitaCebo",
+      "value": ""
+    },
+    {
+      "key": "fechaChoque",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Login superadmin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve access_token', () => pm.expect(body.access_token).to.be.a('string'));",
+                  "pm.test('el rol es superadmin', () => pm.expect(body.usuario.rol).to.eql('superadmin'));",
+                  "pm.test('el superadmin no tiene clinica', () => pm.expect(body.usuario.id_clinica).to.eql(null));",
+                  "pm.collectionVariables.set('tokenSuperadmin', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{superadminUsername}}\",\n  \"password\": \"{{superadminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Guarda el token del superadmin en la variable tokenSuperadmin."
+          }
+        },
+        {
+          "name": "Crear clinica de prueba",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// username unico para poder correr la coleccion varias veces sin chocar con el 409",
+                  "pm.collectionVariables.set('adminUsername', 'admin.' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve la clinica creada', () => pm.expect(body.clinica.id_clinica).to.be.a('number'));",
+                  "pm.test('devuelve una password temporal', () => pm.expect(body.password_temporal).to.be.a('string'));",
+                  "pm.collectionVariables.set('idClinica', body.clinica.id_clinica);",
+                  "pm.collectionVariables.set('adminPassword', body.password_temporal);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenSuperadmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Dental Smiling QA Modulo 4\",\n  \"direccion\": \"Bexhill-on-Sea\",\n  \"telefono\": \"22334455\",\n  \"correo\": \"qa4@dentalsmiling.com\",\n  \"admin_username\": \"{{adminUsername}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/clinicas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clinicas"
+              ]
+            },
+            "description": "Modulo 2. Guarda idClinica y la password temporal del admin."
+          }
+        },
+        {
+          "name": "Login admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el rol es admin', () => pm.expect(body.usuario.rol).to.eql('admin'));",
+                  "pm.test('pertenece a la clinica creada', () => pm.expect(String(body.usuario.id_clinica)).to.eql(String(pm.collectionVariables.get('idClinica'))));",
+                  "pm.test('debe cambiar la password temporal', () => pm.expect(body.usuario.debe_cambiar_password).to.eql(true));",
+                  "pm.collectionVariables.set('tokenAdmin', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Guarda el token del admin en tokenAdmin. La mayor parte del Modulo 4 se prueba con este token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Pacientes",
+      "item": [
+        {
+          "name": "Crear paciente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('nace activo', () => pm.expect(body.activo).to.eql(true));",
+                  "pm.test('el telefono se normaliza', () => pm.expect(body.telefono).to.eql('70001122'));",
+                  "pm.test('la edad viene calculada', () => pm.expect(body.edad).to.be.a('number'));",
+                  "pm.collectionVariables.set('idPaciente', body.id_paciente);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ana\",\n  \"apellido\": \"Lopez\",\n  \"telefono\": \"7000-1122\",\n  \"fecha_nacimiento\": \"2000-01-15\",\n  \"correo\": \"ana@ejemplo.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar pacientes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('hay al menos uno', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por apellido (ignora mayusculas)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('encuentra al menos uno', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes?buscar=LOP",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ],
+              "query": [
+                {
+                  "key": "buscar",
+                  "value": "LOP"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Telefono invalido -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"X\",\n  \"apellido\": \"Y\",\n  \"telefono\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obtener paciente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('es el que creamos', () => pm.expect(String(pm.response.json().id_paciente)).to.eql(String(pm.collectionVariables.get('idPaciente'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT activo:false con token admin -> 204 logico (200 con activo false)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('el admin si puede desactivar por PUT', () => pm.expect(pm.response.json().activo).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}"
+              ]
+            },
+            "description": "El admin SI puede desactivar por PUT: es el unico rol en ROLES_BAJA. Reactivamos en el siguiente request para no dejar el fixture inconsistente para la carpeta de citas."
+          }
+        },
+        {
+          "name": "PUT activo:true (reactivar) con token admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('vuelve a estar activo', () => pm.expect(pm.response.json().activo).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}"
+              ]
+            },
+            "description": "Dejamos el paciente activo para que las citas de la carpeta 4 y 5 puedan agendarse sobre el."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Doctores y horarios",
+      "item": [
+        {
+          "name": "Crear doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve la password temporal una sola vez', () => pm.expect(body.password_temporal).to.be.a('string').with.length.of.at.least(12));",
+                  "pm.collectionVariables.set('idDoctor', body.doctor.id_doctor);",
+                  "pm.collectionVariables.set('doctorPassword', body.password_temporal);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"nombre\": \"Marta\",\n  \"apellido\": \"Perez\",\n  \"telefono\": \"70003344\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Username repetido -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"nombre\": \"Marta\",\n  \"apellido\": \"Perez\",\n  \"telefono\": \"70003344\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cargar horario (5 dias habiles, 08-17)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve los 5 bloques', () => pm.expect(pm.response.json().length).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bloques\": [\n    { \"dia_semana\": \"lunes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"martes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"miercoles\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"jueves\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"viernes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}/horarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}",
+                "horarios"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bloques solapados -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bloques\": [\n    { \"dia_semana\": \"lunes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"12:00:00\" },\n    { \"dia_semana\": \"lunes\", \"hora_inicio\": \"11:00:00\", \"hora_fin\": \"17:00:00\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}/horarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}",
+                "horarios"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Recargar horario valido (deja el fixture sano)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve los 5 bloques', () => pm.expect(pm.response.json().length).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bloques\": [\n    { \"dia_semana\": \"lunes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"martes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"miercoles\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"jueves\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" },\n    { \"dia_semana\": \"viernes\", \"hora_inicio\": \"08:00:00\", \"hora_fin\": \"17:00:00\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}/horarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}",
+                "horarios"
+              ]
+            },
+            "description": "Deja el horario sano para la carpeta 4 (Citas)."
+          }
+        },
+        {
+          "name": "Login del doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el rol es doctor', () => pm.expect(body.usuario.rol).to.eql('doctor'));",
+                  "pm.test('debe cambiar la password temporal', () => pm.expect(body.usuario.debe_cambiar_password).to.eql(true));",
+                  "pm.collectionVariables.set('tokenDoctor', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"password\": \"{{doctorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "/auth/login recibe JSON (LoginRequest), no form-urlencoded: confirmado leyendo app/api/routes/auth.py y app/schemas/auth.py. Verifica el flujo de password temporal de punta a punta."
+          }
+        },
+        {
+          "name": "Dar de baja al doctor (DELETE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));",
+                  "pm.test('sin cuerpo', () => pm.expect(pm.response.text()).to.eql(''));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}"
+              ]
+            },
+            "description": "Desactiva el perfil Doctor Y el Usuario asociado (dar_de_baja_doctor en PersonalService)."
+          }
+        },
+        {
+          "name": "Login del doctor dado de baja -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"password\": \"{{doctorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "El Usuario quedo inactivo junto con el perfil: el login debe rechazarse."
+          }
+        },
+        {
+          "name": "PUT activo:true reactiva doctor y Usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('el perfil vuelve a estar activo', () => pm.expect(pm.response.json().activo).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}"
+              ]
+            },
+            "description": "El 'activo' no se aplica por setattr: PersonalService.reactivar_doctor mueve el perfil Doctor Y el Usuario juntos. El request siguiente lo comprueba con un login real."
+          }
+        },
+        {
+          "name": "Login del doctor reactivado -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el rol sigue siendo doctor', () => pm.expect(body.usuario.rol).to.eql('doctor'));",
+                  "pm.collectionVariables.set('tokenDoctor', body.access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"password\": \"{{doctorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Verifica de punta a punta que reactivar por PUT tambien reactiva el Usuario: si no lo hiciera, este login seguiria en 401. Refresca tokenDoctor con la password temporal original, que sigue siendo valida porque nunca se cambio."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Asistentes",
+      "item": [
+        {
+          "name": "Crear asistente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve una password temporal', () => pm.expect(body.password_temporal).to.be.a('string'));",
+                  "pm.collectionVariables.set('idAsistente', body.asistente.id_asistente);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"recepcion\",\n  \"nombre\": \"Rosa\",\n  \"apellido\": \"Diaz\",\n  \"telefono\": \"70005566\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/asistentes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "asistentes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar asistentes (nunca expone la password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el listado nunca expone la password', () => body.forEach((a) => pm.expect(a).to.not.have.property('password_temporal')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/asistentes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "asistentes"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Citas - camino feliz",
+      "item": [
+        {
+          "name": "Agendar cita",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('nace programada', () => pm.expect(body.estado).to.eql('programada'));",
+                  "pm.test('duracion por defecto de la clinica', () => pm.expect(body.duracion_minutos).to.eql(30));",
+                  "pm.test('no fue reagendada aun', () => pm.expect(body.veces_reagendada).to.eql(0));",
+                  "pm.collectionVariables.set('idCita', body.id_cita);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaCita}}\",\n  \"motivo\": \"Control\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar la agenda",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('hay al menos una', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirmar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('queda confirmada', () => pm.expect(pm.response.json().estado).to.eql('confirmada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"confirmada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "estado"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reagendar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('es la misma cita, no una nueva', () => pm.expect(String(body.id_cita)).to.eql(String(pm.collectionVariables.get('idCita'))));",
+                  "pm.test('cuenta el reagendamiento', () => pm.expect(body.veces_reagendada).to.eql(1));",
+                  "pm.test('pierde la confirmacion', () => pm.expect(body.estado).to.eql('programada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha_hora\": \"{{fechaReagenda}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/reagendar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "reagendar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirmar de nuevo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"confirmada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "estado"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Completar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('queda completada', () => pm.expect(pm.response.json().estado).to.eql('completada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"completada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}",
+                "estado"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Citas - reglas que deben fallar",
+      "item": [
+        {
+          "name": "En el pasado -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaPasada}}\",\n  \"motivo\": \"Control\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sin anticipacion minima -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaManana}}\",\n  \"motivo\": \"Control\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fuera del horario de la clinica -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaTemprana}}\",\n  \"motivo\": \"Control\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Paciente inexistente -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": 999999,\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaCita}}\",\n  \"motivo\": \"Control\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Choque de doctor - cebo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idCitaCebo', pm.response.json().id_cita);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaCita}}\",\n  \"motivo\": \"Cebo para choque\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            },
+            "description": "fechaCita ya se uso en la carpeta 4, pero esa cita se reagendo a fechaReagenda, asi que el horario de fechaCita esta libre otra vez para este doctor."
+          }
+        },
+        {
+          "name": "Choque de doctor -> 409",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 15 minutos despues de fechaCita: se solapa con la cebo de 30 minutos.",
+                  "const base = new Date(pm.collectionVariables.get('fechaCita'));",
+                  "base.setMinutes(base.getMinutes() + 15);",
+                  "const pad = (n) => String(n).padStart(2, '0');",
+                  "const conMargen = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}` +",
+                  "  `T${pad(base.getHours())}:${pad(base.getMinutes())}:00`;",
+                  "pm.collectionVariables.set('fechaChoque', conMargen);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaChoque}}\",\n  \"motivo\": \"Choca con la cebo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transicion invalida (programada -> completada directo) -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"completada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCitaCebo}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCitaCebo}}",
+                "estado"
+              ]
+            },
+            "description": "La cita cebo esta recien creada ('programada'): pasar directo a 'completada' viola la maquina de estados."
+          }
+        },
+        {
+          "name": "Reagendar demasiado pronto -> 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha_hora\": \"{{fechaManana}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCitaCebo}}/reagendar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCitaCebo}}",
+                "reagendar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Borrar una cita -> 405",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 405', () => pm.response.to.have.status(405));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{idCita}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{idCita}}"
+              ]
+            },
+            "description": "Las citas no se borran, se cancelan: no existe DELETE /citas/{id}, FastAPI responde 405 Method Not Allowed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Aislamiento y permisos",
+      "item": [
+        {
+          "name": "El PUT no es una puerta trasera al DELETE (doctor) -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Regla que salio de una revision de codigo: 'activo' viaja en el body",
+                  "// y el repositorio lo aplica con setattr, asi que sin un chequeo explicito",
+                  "// un rol con permiso de edicion pero no de baja podria desactivar un",
+                  "// paciente por esta via y esquivar la matriz de permisos.",
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}/pacientes/{{idPaciente}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"activo\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "El paciente sigue activo despues del intento",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el intento no lo desactivo', () => pm.expect(body.activo).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}/pacientes/{{idPaciente}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "El doctor si puede editar los demas campos del paciente -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// El chequeo de 'activo' no debe bloquear la edicion normal.",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('el telefono se actualizo', () => pm.expect(body.telefono).to.eql('70009999'));",
+                  "pm.test('sigue activo', () => pm.expect(body.activo).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}/pacientes/{{idPaciente}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"telefono\": \"70009999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "El doctor solo ve sus citas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const idDoctor = String(pm.collectionVariables.get('idDoctor'));",
+                  "pm.test('un doctor solo ve sus propias citas', () => body.forEach((c) => pm.expect(String(c.id_doctor)).to.eql(idDoctor)));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "El id_doctor del query string se ignora para el rol doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const idDoctor = String(pm.collectionVariables.get('idDoctor'));",
+                  "pm.test('ignora el id_doctor ajeno del query string: solo trae las suyas (o ninguna)', () => body.forEach((c) => pm.expect(String(c.id_doctor)).to.eql(idDoctor)));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/citas?id_doctor=999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ],
+              "query": [
+                {
+                  "key": "id_doctor",
+                  "value": "999999"
+                }
+              ]
+            },
+            "description": "listar_citas fuerza id_doctor = doctor_actual.id_doctor cuando el rol es doctor, sin importar lo que venga en el query string. Con 999999 la lista deberia venir vacia o, si por algun motivo hay otras citas del propio doctor, todas con su propio id."
+          }
+        },
+        {
+          "name": "El doctor no puede agendar -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": {{idPaciente}},\n  \"id_doctor\": {{idDoctor}},\n  \"fecha_hora\": \"{{fechaCita}}\",\n  \"motivo\": \"No deberia poder\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            },
+            "description": "AGENDAR = superadmin, admin, asistente. El rol doctor no esta en la lista."
+          }
+        },
+        {
+          "name": "El doctor no puede dar de alta doctores -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"otro.doctor\",\n  \"nombre\": \"Otro\",\n  \"apellido\": \"Doctor\",\n  \"telefono\": \"70009988\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores"
+              ]
+            },
+            "description": "ESCRITURA en doctores.py es solo superadmin y admin."
+          }
+        },
+        {
+          "name": "El admin no puede usar X-Clinica-Id (se ignora)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve sus propios pacientes, no los de la clinica 999', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "X-Clinica-Id",
+                "value": "999"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            },
+            "description": "resolve_clinica_id solo respeta X-Clinica-Id para el rol superadmin; para el resto usa la clinica del propio token."
+          }
+        },
+        {
+          "name": "El superadmin necesita X-Clinica-Id -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el mensaje pide el header', () => pm.expect(pm.response.json().detail).to.include('X-Clinica-Id'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenSuperadmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "El superadmin con X-Clinica-Id -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve un array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenSuperadmin}}"
+              },
+              {
+                "key": "X-Clinica-Id",
+                "value": "{{idClinica}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sin token -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "VERIFICACION MANUAL PENDIENTE (no se puede provocar via API): un Usuario con rol doctor pero SIN fila Doctor asociada (por ejemplo, si el alta no paso por PersonalService, o la fila Doctor se borro a mano) debe ver una lista vacia en GET /citas, y no todas las citas de la clinica. La regla esta en citas.py, funcion listar_citas: 'if usuario.rol == RolUsuario.DOCTOR: if doctor_actual is None: return []'. Para verificarlo a mano contra MySQL: 1) crear un Usuario con rol='doctor' directamente por SQL (INSERT INTO usuarios ...) sin insertar la fila correspondiente en doctores; 2) loguear con ese usuario; 3) GET /citas con su token debe devolver [] (200), nunca 403 ni la lista completa. No se agrega como request porque la API no expone ninguna forma de crear ese estado inconsistente (POST /doctores siempre crea el Usuario y el Doctor juntos via PersonalService)."
+    }
+  ]
+}
