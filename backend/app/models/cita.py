@@ -91,6 +91,14 @@ class Cita(Base):
     id_asistente: Mapped[int | None] = mapped_column(
         ForeignKey("asistente.id_asistente"), nullable=True
     )
+    #: Que procedimiento del catalogo se realizo en esta cita puntual. Nullable
+    #: y no se exige al agendar (decision 8 del spec del Modulo 5): la cita se
+    #: agenda antes de saber con certeza que se va a hacer. No reemplaza a
+    #: PlanTratamientoDetalle: una cita puede no tener plan, y un plan puede
+    #: tener detalles que no vinieron de ninguna cita puntual.
+    id_tratamiento: Mapped[int | None] = mapped_column(
+        ForeignKey("tratamiento.id_tratamiento"), nullable=True
+    )
     fecha_hora: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     #: Foto del momento en que se agendo. Si la clinica cambia la duracion por
     #: defecto, las citas ya agendadas no deben estirarse solas ni empezar a

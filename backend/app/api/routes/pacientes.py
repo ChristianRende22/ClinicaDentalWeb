@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles, resolve_clinica_id
 from app.db import get_db
+from app.exceptions import ReferenciaEnUsoError
 from app.models import RolUsuario, Usuario
 from app.repositories.paciente_repository import PacienteRepository
 from app.schemas.personas import PacienteCreate, PacienteResponse, PacienteUpdate
@@ -92,9 +93,26 @@ def actualizar_paciente(
             detail="Solo un administrador puede activar o desactivar un paciente",
         )
 
-    registro = PacienteRepository(db).actualizar(id_clinica, id_paciente, datos)
+    # 'activo' no viaja por el setattr generico de actualizar(): dar de baja
+    # consulta si el paciente tiene un plan de tratamiento activo (Modulo 5,
+    # decision 1 del spec), y ese chequeo vive en eliminar(), no en
+    # actualizar(). Sin esto, un PUT {"activo": false} esquivaba por completo
+    # la misma regla que DELETE /pacientes/{id} si respeta.
+    repo = PacienteRepository(db)
+    activo = datos.pop("activo", None)
+    registro = repo.actualizar(id_clinica, id_paciente, datos)
     if registro is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NO_ENCONTRADO)
+
+    if activo is False:
+        try:
+            repo.eliminar(id_clinica, id_paciente)
+        except ReferenciaEnUsoError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+    elif activo is True:
+        registro.activo = True
+        db.flush()
+
     db.commit()
     return PacienteResponse.model_validate(registro)
 
@@ -109,8 +127,17 @@ def dar_de_baja_paciente(
     id_clinica: int = Depends(resolve_clinica_id),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Borrado logico: pone activo = False, no borra la fila."""
-    if not PacienteRepository(db).eliminar(id_clinica, id_paciente):
+    """Borrado logico: pone activo = False, no borra la fila.
+
+    409 y no 422 si tiene un plan de tratamiento activo: es un conflicto con
+    el estado del sistema, no una regla sobre datos enviados (Modulo 5,
+    mismo criterio que ReferenciaEnUsoError en tratamientos.py).
+    """
+    try:
+        dado_de_baja = PacienteRepository(db).eliminar(id_clinica, id_paciente)
+    except ReferenciaEnUsoError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+    if not dado_de_baja:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NO_ENCONTRADO)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

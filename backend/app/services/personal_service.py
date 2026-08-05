@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.exceptions import ReferenciaInvalidaError, UsernameYaExisteError
+from app.exceptions import ReferenciaEnUsoError, ReferenciaInvalidaError, UsernameYaExisteError
 from app.models import RolUsuario, Usuario
 from app.repositories.asistente_repository import AsistenteRepository
 from app.repositories.doctor_repository import DoctorRepository
@@ -131,6 +131,21 @@ class PersonalService:
         return True
 
     def dar_de_baja_doctor(self, id_clinica: int, id_doctor: int) -> bool:
+        """Bloquea si el doctor es responsable de un PlanTratamiento activo
+        (seccion 1 del spec del Modulo 5) -- se chequea ANTES de tocar
+        _cambiar_actividad, asi no hace falta modificar esa funcion (que ya
+        coordina perfil + Usuario) para agregar una regla que solo aplica a
+        doctores, no a asistentes.
+        """
+        from app.repositories.plan_tratamiento_repository import PlanTratamientoRepository
+
+        if PlanTratamientoRepository(self.db).existe_plan_activo_de_doctor(
+            id_clinica, id_doctor
+        ):
+            raise ReferenciaEnUsoError(
+                "No se puede dar de baja: el doctor tiene un plan de tratamiento activo"
+                " del que es responsable"
+            )
         return self._cambiar_actividad(self.doctores, id_clinica, id_doctor, False)
 
     def dar_de_baja_asistente(self, id_clinica: int, id_asistente: int) -> bool:

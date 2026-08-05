@@ -1,9 +1,12 @@
-"""Helpers compartidos por los tests del Modulo 4.
+"""Helpers compartidos por los tests del Modulo 4 y del Modulo 5.
 
 Todos hacen flush(), no commit(): quien necesite persistir de verdad (los tests
 de rutas, que corren el endpoint en otro hilo) hace el commit explicito.
 """
+import itertools
 from datetime import datetime, timedelta
+
+_contador_username = itertools.count(1)
 
 
 def crear_clinica(db, nombre="Dental A"):
@@ -44,6 +47,25 @@ def token_de(usuario) -> str:
 
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
+
+
+def headers_de(db, id_clinica, rol):
+    """Crea un usuario nuevo con ese rol (username con sufijo unico, para no
+    chocar con la unicidad global de username -- Modulo 1) y devuelve el
+    header Authorization ya armado. Usado por los tests de rutas del
+    Modulo 5 en vez de repetir este bloque en cada archivo.
+
+    Para superadmin, ademas agrega X-Clinica-Id: un superadmin no tiene
+    id_clinica propio y necesita indicar sobre cual clinica opera.
+    """
+    n = next(_contador_username)
+    usuario = crear_usuario(
+        db, rol, id_clinica if rol.value != "superadmin" else None, username=f"user.{rol.value}.{n}"
+    )
+    headers = auth(token_de(usuario))
+    if rol.value == "superadmin":
+        headers["X-Clinica-Id"] = str(id_clinica)
+    return headers
 
 
 def crear_paciente(db, id_clinica, **campos):

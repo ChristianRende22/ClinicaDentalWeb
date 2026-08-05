@@ -1,5 +1,6 @@
 from sqlalchemy import func, or_, select
 
+from app.exceptions import ReferenciaEnUsoError
 from app.models import Paciente
 from app.repositories.base import BaseRepository
 
@@ -68,10 +69,25 @@ class PacienteRepository(BaseRepository[Paciente]):
         return paciente
 
     def eliminar(self, id_clinica: int, id_: int) -> bool:
-        """Borrado logico: pone activo = False. Idempotente."""
+        """Borrado logico: pone activo = False. Idempotente.
+
+        Bloquea si el paciente tiene un PlanTratamiento activo (seccion 1 del
+        spec del Modulo 5): dar de baja a alguien con un tratamiento en curso
+        deja el plan colgando de un paciente al que ya no se le puede
+        agendar nada nuevo. Import adentro del metodo para evitar el ciclo
+        (plan_tratamiento_repository no depende de este archivo).
+        """
         paciente = self.obtener(id_clinica, id_)
         if paciente is None:
             return False
+
+        from app.repositories.plan_tratamiento_repository import PlanTratamientoRepository
+
+        if PlanTratamientoRepository(self.db).existe_plan_activo_de_paciente(id_clinica, id_):
+            raise ReferenciaEnUsoError(
+                "No se puede dar de baja: el paciente tiene un plan de tratamiento activo"
+            )
+
         paciente.activo = False
         self.db.flush()
         return True

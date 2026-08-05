@@ -4,16 +4,11 @@ from datetime import date, time
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator, model_validator
 
 from app.models import DiaSemana
+from app.schemas.comunes import no_nulo as _no_nulo
+from app.schemas.comunes import texto_limpio as _texto_limpio
 
 _SOLO_TELEFONO = re.compile(r"^[0-9+]{8,15}$")
 _EDAD_MAXIMA = 120
-
-
-def _texto_limpio(valor: str) -> str:
-    limpio = valor.strip()
-    if not limpio:
-        raise ValueError("No puede estar vacio")
-    return limpio
 
 
 def _telefono_limpio(valor: str) -> str:
@@ -22,21 +17,6 @@ def _telefono_limpio(valor: str) -> str:
     if not _SOLO_TELEFONO.match(limpio):
         raise ValueError("El telefono debe tener entre 8 y 15 digitos")
     return limpio
-
-
-def _no_nulo(valor, campo: str):
-    """Rechaza un null explicito en un campo que la columna no admite.
-
-    Los schemas Update declaran todo como `X | None` para permitir la
-    actualizacion parcial, pero eso hace que un null EXPLICITO en el body
-    tambien pase la validacion y llegue al setattr del repositorio. Contra una
-    columna nullable=False eso es un IntegrityError, o sea un 500 donde
-    corresponde un 422. "Ausente" y "null" no son lo mismo y hay que
-    distinguirlos en el borde.
-    """
-    if valor is None:
-        raise ValueError(f"'{campo}' no puede ser null")
-    return valor
 
 
 def _fecha_de_nacimiento_valida(valor: date | None) -> date | None:

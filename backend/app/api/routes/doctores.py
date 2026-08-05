@@ -5,6 +5,7 @@ from app.api.deps import get_current_user, get_doctor_actual, require_roles, res
 from app.db import get_db
 from app.exceptions import (
     HorarioInvalidoError,
+    ReferenciaEnUsoError,
     ReferenciaInvalidaError,
     UsernameYaExisteError,
 )
@@ -137,6 +138,8 @@ def actualizar_doctor(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
             )
+        except ReferenciaEnUsoError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
         if not cambio:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail=NO_ENCONTRADO
@@ -157,6 +160,9 @@ def dar_de_baja_doctor(
 ) -> Response:
     """Desactiva el perfil Y el Usuario: un profesional dado de baja no debe
     poder seguir entrando al sistema.
+
+    409 y no 422 si tiene un plan de tratamiento activo (Modulo 5): es un
+    conflicto con el estado del sistema, no una regla sobre datos enviados.
     """
     try:
         dado_de_baja = PersonalService(db).dar_de_baja_doctor(id_clinica, id_doctor)
@@ -164,6 +170,8 @@ def dar_de_baja_doctor(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
         )
+    except ReferenciaEnUsoError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
     if not dado_de_baja:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NO_ENCONTRADO)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

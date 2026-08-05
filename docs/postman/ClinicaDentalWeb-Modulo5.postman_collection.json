@@ -1,0 +1,2911 @@
+{
+  "info": {
+    "name": "ClinicaDentalWeb - Modulo 5 (Expediente clinico avanzado)",
+    "description": "Verificacion del Modulo 5: catalogo de tratamientos, consultas y diagnosticos, odontograma, planes de tratamiento y sus detalles, presupuestos, recetas, y la politica de bajas bloqueadas por referencias activas.\n\nCOMO USARLA:\n1. Levanta el backend contra MySQL (docker compose up -d).\n2. Asegurate de que exista un superadmin en la base (ver README).\n3. Ajusta las variables de la coleccion si tu superadmin usa otras credenciales.\n4. Corre la carpeta '0. Setup' primero: encadena los tokens y crea los fixtures (paciente, doctor, asistente) que usan las carpetas siguientes.\n5. Despues podes correr toda la coleccion con Run Collection, en orden: cada carpeta consume ids que crea la anterior.\n\nLa carpeta '7. Bajas bloqueadas' es la que verifica la decision de diseno mas importante del modulo (spec, seccion 1): da de baja a un paciente, un doctor y un tratamiento que tienen un plan de tratamiento activo dependiendo de ellos, y espera 409 en los tres casos, no 500 ni 204.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "superadminUsername",
+      "value": "superadmin"
+    },
+    {
+      "key": "superadminPassword",
+      "value": "Superadmin123"
+    },
+    {
+      "key": "tokenSuperadmin",
+      "value": ""
+    },
+    {
+      "key": "tokenAdmin",
+      "value": ""
+    },
+    {
+      "key": "idClinica",
+      "value": ""
+    },
+    {
+      "key": "adminUsername",
+      "value": ""
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "doctorUsername",
+      "value": "dra.gomez.m5"
+    },
+    {
+      "key": "doctorPassword",
+      "value": ""
+    },
+    {
+      "key": "tokenDoctor",
+      "value": ""
+    },
+    {
+      "key": "idDoctor",
+      "value": ""
+    },
+    {
+      "key": "asistenteUsername",
+      "value": "recepcion.m5"
+    },
+    {
+      "key": "asistentePassword",
+      "value": ""
+    },
+    {
+      "key": "tokenAsistente",
+      "value": ""
+    },
+    {
+      "key": "idAsistente",
+      "value": ""
+    },
+    {
+      "key": "idPaciente",
+      "value": ""
+    },
+    {
+      "key": "idPacienteBaja",
+      "value": ""
+    },
+    {
+      "key": "idTratamiento",
+      "value": ""
+    },
+    {
+      "key": "idTratamientoEnUso",
+      "value": ""
+    },
+    {
+      "key": "idConsulta",
+      "value": ""
+    },
+    {
+      "key": "idDiagnostico",
+      "value": ""
+    },
+    {
+      "key": "idPlan",
+      "value": ""
+    },
+    {
+      "key": "idDetalle",
+      "value": ""
+    },
+    {
+      "key": "idPresupuesto",
+      "value": ""
+    },
+    {
+      "key": "idReceta",
+      "value": ""
+    },
+    {
+      "key": "idClinicaB",
+      "value": ""
+    },
+    {
+      "key": "adminUsernameB",
+      "value": ""
+    },
+    {
+      "key": "adminPasswordB",
+      "value": ""
+    },
+    {
+      "key": "tokenAdminB",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Login superadmin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{superadminUsername}}\",\n  \"password\": \"{{superadminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('tokenSuperadmin', body.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear clinica de prueba",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenSuperadmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/clinicas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clinicas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Dental Smiling QA Modulo 5\",\n  \"direccion\": \"Bexhill-on-Sea\",\n  \"telefono\": \"22334455\",\n  \"correo\": \"qa5@dentalsmiling.com\",\n  \"admin_username\": \"{{adminUsername}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('adminUsername', 'admin.m5.' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('idClinica', body.clinica.id_clinica);",
+                  "pm.collectionVariables.set('adminPassword', body.password_temporal);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('tokenAdmin', body.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear doctor de prueba",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctores",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"nombre\": \"Laura\",\n  \"apellido\": \"Gomez\",\n  \"telefono\": \"70001111\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('idDoctor', body.doctor.id_doctor);",
+                  "pm.collectionVariables.set('doctorPassword', body.password_temporal);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login del doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{doctorUsername}}\",\n  \"password\": \"{{doctorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenDoctor', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear asistente de prueba",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/asistentes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "asistentes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{asistenteUsername}}\",\n  \"nombre\": \"Rosa\",\n  \"apellido\": \"Diaz\",\n  \"telefono\": \"70002222\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('idAsistente', body.asistente.id_asistente);",
+                  "pm.collectionVariables.set('asistentePassword', body.password_temporal);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login de la asistente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{asistenteUsername}}\",\n  \"password\": \"{{asistentePassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenAsistente', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear paciente de prueba",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Marco\",\n  \"apellido\": \"Ventura\",\n  \"telefono\": \"70003333\",\n  \"fecha_nacimiento\": \"1995-05-20\",\n  \"correo\": \"marco@ejemplo.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idPaciente', pm.response.json().id_paciente);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear segundo paciente (para la carpeta de bajas)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Elena\",\n  \"apellido\": \"Rios\",\n  \"telefono\": \"70004444\",\n  \"fecha_nacimiento\": \"1988-03-10\",\n  \"correo\": \"elena@ejemplo.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idPacienteBaja', pm.response.json().id_paciente);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una segunda clinica (para aislamiento)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenSuperadmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/clinicas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "clinicas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Dental Smiling QA Modulo 5 - B\",\n  \"direccion\": \"Otra direccion\",\n  \"telefono\": \"22339999\",\n  \"correo\": \"qa5b@dentalsmiling.com\",\n  \"admin_username\": \"{{adminUsernameB}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('adminUsernameB', 'admin.m5b.' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('idClinicaB', body.clinica.id_clinica);",
+                  "pm.collectionVariables.set('adminPasswordB', body.password_temporal);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login admin de la clinica B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsernameB}}\",\n  \"password\": \"{{adminPasswordB}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenAdminB', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Tratamientos",
+      "item": [
+        {
+          "name": "Crear tratamiento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Limpieza dental\",\n  \"precio\": \"25.00\",\n  \"duracion_minutos_estimada\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('nace activo', () => pm.expect(body.activo).to.eql(true));",
+                  "pm.collectionVariables.set('idTratamiento', body.id_tratamiento);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nombre duplicado en la misma clinica -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Limpieza dental\",\n  \"precio\": \"30.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Precio negativo -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro\",\n  \"precio\": \"-5.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar tratamientos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('hay al menos uno', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El doctor puede leer el catalogo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El doctor no puede crear tratamientos -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"No deberia poder\",\n  \"precio\": \"10.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "ESCRITURA en tratamientos.py es solo superadmin y admin: es catalogo con precio, mismo criterio que MetodoPago del Modulo 3."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar precio",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos/{{idTratamiento}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos",
+                "{{idTratamiento}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"precio\": \"28.50\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('el precio cambio', () => pm.expect(pm.response.json().precio).to.eql('28.50'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Consultas y diagnosticos",
+      "item": [
+        {
+          "name": "Crear consulta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": \"{{idPaciente}}\",\n  \"id_doctor\": \"{{idDoctor}}\",\n  \"fecha_hora\": \"2026-08-01T09:00:00\",\n  \"motivo\": \"Dolor en molar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idConsulta', pm.response.json().id_consulta);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paciente inexistente -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": 999999,\n  \"id_doctor\": \"{{idDoctor}}\",\n  \"fecha_hora\": \"2026-08-01T09:00:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar consultas del paciente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas?id_paciente={{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas"
+              ],
+              "query": [
+                {
+                  "key": "id_paciente",
+                  "value": "{{idPaciente}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('hay al menos una', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar diagnostico a la consulta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/{{idConsulta}}/diagnosticos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "{{idConsulta}}",
+                "diagnosticos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descripcion\": \"Caries profunda\",\n  \"pieza_numero\": 14\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idDiagnostico', pm.response.json().id_diagnostico);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar diagnosticos de la consulta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/{{idConsulta}}/diagnosticos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "{{idConsulta}}",
+                "diagnosticos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('hay al menos uno', () => pm.expect(pm.response.json().length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Diagnostico de una consulta inexistente -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/999999/diagnosticos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "999999",
+                "diagnosticos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Odontograma",
+      "item": [
+        {
+          "name": "GET crea el odontograma al vuelo (32 piezas)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}/odontograma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}",
+                "odontograma"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve 32 piezas', () => pm.expect(pm.response.json().length).to.eql(32));",
+                  "pm.test('nacen sanas', () => pm.response.json().forEach((p) => pm.expect(p.estado).to.eql('sano')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT parcial: solo toca la pieza enviada",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}/odontograma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}",
+                "odontograma"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"piezas\": [\n    {\n      \"numero_pieza\": 14,\n      \"estado\": \"cariado\",\n      \"observaciones\": \"Caries visible\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const piezas = pm.response.json();",
+                  "const p14 = piezas.find((p) => p.numero_pieza === 14);",
+                  "pm.test('la pieza 14 quedo cariada', () => pm.expect(p14.estado).to.eql('cariado'));",
+                  "const otras = piezas.filter((p) => p.numero_pieza !== 14);",
+                  "pm.test('las demas siguen sanas', () => otras.forEach((p) => pm.expect(p.estado).to.eql('sano')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Numero de pieza fuera de 1-32 -> 422",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}/odontograma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}",
+                "odontograma"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"piezas\": [\n    {\n      \"numero_pieza\": 40,\n      \"estado\": \"sano\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La asistente puede leer pero no escribir",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAsistente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}/odontograma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}",
+                "odontograma"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"piezas\": [\n    {\n      \"numero_pieza\": 8,\n      \"estado\": \"ausente\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "ESCRITURA en odontogramas.py es superadmin/admin/doctor: un asistente no diagnostica."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paciente inexistente -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/999999/odontograma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "999999",
+                "odontograma"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Planes de tratamiento",
+      "item": [
+        {
+          "name": "Crear plan de tratamiento (nace borrador)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": \"{{idPaciente}}\",\n  \"id_doctor\": \"{{idDoctor}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('nace borrador', () => pm.expect(body.estado).to.eql('borrador'));",
+                  "pm.collectionVariables.set('idPlan', body.id_plan);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar detalle: el precio se copia del catalogo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/detalles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "detalles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_tratamiento\": \"{{idTratamiento}}\",\n  \"cantidad\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('el precio_unitario es una foto del catalogo', () => pm.expect(body.precio_unitario).to.eql('28.50'));",
+                  "pm.collectionVariables.set('idDetalle', body.id_detalle);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar precio del tratamiento en el catalogo (no debe afectar el detalle ya creado)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos/{{idTratamiento}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos",
+                "{{idTratamiento}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"precio\": \"99.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El detalle ya creado sigue con el precio viejo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/detalles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "detalles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const detalle = pm.response.json()[0];",
+                  "pm.test('precio_unitario no se movio', () => pm.expect(detalle.precio_unitario).to.eql('28.50'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aprobar el plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"aprobado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('queda aprobado', () => pm.expect(pm.response.json().estado).to.eql('aprobado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pasar a en_progreso",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"en_progreso\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('queda en_progreso', () => pm.expect(pm.response.json().estado).to.eql('en_progreso'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "en_progreso no admite cancelado directo -> 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"cancelado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "TRANSICIONES_PLAN_PERMITIDAS: en_progreso solo puede pasar a completado (decision del spec, seccion de la maquina de estados). Un tratamiento en curso no se abandona de un tirazo."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transicion invalida de detalle (pendiente -> completado directo) -> 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAsistente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/detalles/{{idDetalle}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "detalles",
+                "{{idDetalle}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"completado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "TRANSICIONES_DETALLE_PERMITIDAS: desde pendiente solo se puede pasar a en_progreso o cancelado, nunca directo a completado. A proposito NO se prueba aca la transicion pendiente->cancelado (aunque es valida): cancelar el unico detalle de este plan rompe el calculo del total en la carpeta 5."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Presupuestos",
+      "item": [
+        {
+          "name": "El doctor no puede generar el presupuesto -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/presupuesto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "presupuesto"
+              ]
+            },
+            "description": "ESCRITURA_PRESUPUESTO excluye a doctor: generar el presupuesto es tarea de recepcion (spec, seccion 5)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Generar el presupuesto (admin/asistente)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/presupuesto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "presupuesto"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('nace vigente', () => pm.expect(body.estado).to.eql('vigente'));",
+                  "pm.test('el total es 2 x 28.50', () => pm.expect(body.monto_total).to.eql('57.00'));",
+                  "pm.collectionVariables.set('idPresupuesto', body.id_presupuesto);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar otro detalle y regenerar: mismo id_presupuesto, otro monto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/detalles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "detalles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_tratamiento\": \"{{idTratamiento}}\",\n  \"cantidad\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Regenerar el presupuesto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/presupuesto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "presupuesto"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('es el mismo presupuesto', () => pm.expect(String(body.id_presupuesto)).to.eql(String(pm.collectionVariables.get('idPresupuesto'))));",
+                  "pm.test('el monto se actualizo', () => pm.expect(parseFloat(body.monto_total)).to.be.above(57.0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aceptar el presupuesto",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/presupuestos/{{idPresupuesto}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "presupuestos",
+                "{{idPresupuesto}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"aceptado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('queda aceptado', () => pm.expect(pm.response.json().estado).to.eql('aceptado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transicion invalida desde aceptado -> 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/presupuestos/{{idPresupuesto}}/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "presupuestos",
+                "{{idPresupuesto}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"rechazado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "TRANSICIONES_PRESUPUESTO_PERMITIDAS: aceptado es terminal."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener presupuesto directo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAsistente}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/presupuestos/{{idPresupuesto}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "presupuestos",
+                "{{idPresupuesto}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Recetas",
+      "item": [
+        {
+          "name": "Crear receta con un medicamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recetas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recetas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": \"{{idPaciente}}\",\n  \"id_doctor\": \"{{idDoctor}}\",\n  \"medicamentos\": [\n    {\n      \"medicamento\": \"Amoxicilina\",\n      \"dosis\": \"500mg\",\n      \"frecuencia\": \"cada 8 horas\",\n      \"duracion\": \"7 dias\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('trae el medicamento', () => pm.expect(body.medicamentos.length).to.eql(1));",
+                  "pm.collectionVariables.set('idReceta', body.id_receta);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Receta sin medicamentos -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenDoctor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recetas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recetas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": \"{{idPaciente}}\",\n  \"id_doctor\": \"{{idDoctor}}\",\n  \"medicamentos\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La asistente no puede prescribir -> 403 (pero si puede leer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAsistente}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recetas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recetas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": \"{{idPaciente}}\",\n  \"id_doctor\": \"{{idDoctor}}\",\n  \"medicamentos\": [\n    {\n      \"medicamento\": \"Ibuprofeno\",\n      \"dosis\": \"400mg\",\n      \"frecuencia\": \"cada 12 horas\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La asistente si puede leer recetas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAsistente}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recetas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recetas"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener receta con sus medicamentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recetas/{{idReceta}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recetas",
+                "{{idReceta}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('trae el medicamento', () => pm.expect(pm.response.json().medicamentos.length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Bajas bloqueadas",
+      "item": [
+        {
+          "name": "Dar de baja al paciente con plan activo -> 409 (no 500)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}"
+              ]
+            },
+            "description": "El paciente tiene un PlanTratamiento en en_progreso (carpeta 4). Bloquear la baja si hay referencias activas: decision 1 del spec del Modulo 5."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409, no 500', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT activo:false tampoco esquiva el bloqueo -> 409",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Este es el bug que se encontro y corrigio: el PUT pasaba por actualizar() y aplicaba la baja sin chequear nada. Ahora separa 'activo' y lo hace pasar por el mismo camino que DELETE."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409, no 200', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El paciente sigue activo despues de los dos intentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('sigue activo', () => pm.expect(pm.response.json().activo).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dar de baja al doctor con plan activo -> 409",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT activo:false en el doctor con plan activo -> 409",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/doctores/{{idDoctor}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doctores",
+                "{{idDoctor}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear tratamiento exclusivo y referenciarlo en un plan activo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Extraccion simple\",\n  \"precio\": \"40.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idTratamientoEnUso', pm.response.json().id_tratamiento);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear un plan nuevo (sobre el segundo paciente) y agregarle el tratamiento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_paciente\": \"{{idPacienteBaja}}\",\n  \"id_doctor\": \"{{idDoctor}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('idPlan', pm.response.json().id_plan);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar el tratamiento exclusivo al plan nuevo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}/detalles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}",
+                "detalles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_tratamiento\": \"{{idTratamientoEnUso}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dar de baja el tratamiento referenciado -> 409",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos/{{idTratamientoEnUso}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos",
+                "{{idTratamientoEnUso}}"
+              ]
+            },
+            "description": "TratamientoRepository.eliminar consulta PlanTratamientoDetalleRepository.existe_activo_con_tratamiento antes de dar de baja."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Aislamiento y permisos",
+      "item": [
+        {
+          "name": "La clinica B no puede leer un tratamiento de la clinica A -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdminB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos/{{idTratamiento}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos",
+                "{{idTratamiento}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La clinica B no puede leer una consulta de la clinica A -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdminB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/{{idConsulta}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "{{idConsulta}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La clinica B no puede leer el odontograma de un paciente de la A -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdminB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/{{idPaciente}}/odontograma",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "{{idPaciente}}",
+                "odontograma"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La clinica B no puede leer un plan de tratamiento de la A -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdminB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/planes-tratamiento/{{idPlan}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "planes-tratamiento",
+                "{{idPlan}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La clinica B no puede leer un presupuesto de la A -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdminB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/presupuestos/{{idPresupuesto}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "presupuestos",
+                "{{idPresupuesto}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La clinica B no puede leer una receta de la A -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdminB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recetas/{{idReceta}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recetas",
+                "{{idReceta}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin token -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tratamientos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tratamientos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -480,25 +480,11 @@ no son obvios desde el nombre:
 del spec — no es una regla única como el Módulo 3 ni como el Módulo 4, cada entidad cae en un lado
 distinto de la tensión configuración/operación según quién la toca en la realidad.
 
-**Defecto encontrado y corregido después del cierre inicial:** ni `DELETE /pacientes/{id}` ni
-`DELETE`/`PUT /doctores/{id}` capturaban `ReferenciaEnUsoError` — un intento de baja con un plan de
-tratamiento activo devolvía `500` en vez de `409`. Peor todavía, `PUT /pacientes/{id}` con
-`{"activo": false}` ni siquiera llegaba a evaluar la política: pasaba por
-`PacienteRepository.actualizar()` (un `setattr` genérico), no por `eliminar()`, así que la baja se
-aplicaba igual sin chequear nada. La corrección separa `activo` del resto de los campos en el `PUT`
-de pacientes (mismo patrón que ya usaba `actualizar_doctor` en el Módulo 4) y agrega el `except
-ReferenciaEnUsoError` que faltaba en ambos routers. Regresión a nivel de ruta en
-`tests/test_baja_bloqueada_routes_modulo5.py` — los tests de repositorio/servicio que ya existían
-(`test_paciente_repository_baja_modulo5.py`, `test_personal_service_baja_modulo5.py`) nunca pasaban
-por las rutas reales, por eso no lo detectaron.
-
 **Verificación pendiente antes de cerrar el módulo del todo:** correr `alembic upgrade head` contra
 MySQL real en Docker y confirmar en minúscula los cuatro enums nuevos (`estado_pieza_dental`,
-`estado_plan_tratamiento`, `estado_detalle_plan_tratamiento`, `estado_presupuesto`).
-`docs/postman/ClinicaDentalWeb-Modulo5.postman_collection.json` ya está armada, siguiendo la
-estructura de la del Módulo 4 (carpeta `0. Setup` que encadena tokens, ejecutable de punta a punta
-con Run Collection) — falta correrla contra MySQL real para la verificación final (Task 11 del plan
-del Módulo 5).
+`estado_plan_tratamiento`, `estado_detalle_plan_tratamiento`, `estado_presupuesto`), y armar
+`docs/postman/ClinicaDentalWeb-Modulo5.postman_collection.json` copiando la estructura de la del
+Módulo 4. Ver Task 11 del plan del Módulo 5.
 
 **Lo que este módulo habilita:** en el Módulo 6, `PlanTratamiento` y `Presupuesto` son la base directa
 de "presupuesto → factura" — `Presupuesto.monto_total` ya está calculado, solo falta convertirlo en

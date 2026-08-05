@@ -43,4 +43,16 @@ class ChoqueDeCitaError(Exception):
 
 
 class TransicionInvalidaError(Exception):
-    """El estado actual de la cita no admite esa transicion."""
+    """El estado actual de la cita (o del plan de tratamiento) no admite esa transicion."""
+
+
+class ReferenciaEnUsoError(Exception):
+    """No se puede dar de baja: algo activo depende de este registro.
+
+    Distinta de ReferenciaInvalidaError (que es sobre una FK que APUNTA a un
+    registro invalido). Esta es al reves: alguien quiere dar de baja un
+    registro al que otros le APUNTAN activamente. Nace de la decision de
+    politica que quedo pendiente al cerrar el Modulo 4 (ver seccion 11 del
+    spec de ese modulo): bloquear la baja si hay referencias activas, en vez
+    de dejarla en el aire o cancelar en cascada.
+    """
