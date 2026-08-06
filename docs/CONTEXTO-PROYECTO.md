@@ -1,7 +1,8 @@
 # Contexto del Proyecto — ClinicaDentalWeb
 
-**Para:** Meli (y su asistente de IA), para continuar con los Módulos 4 y 5.
-**Última actualización:** 2026-07-31 — Módulos 1, 2 y 3 completos.
+**Para:** todo el equipo (Christian y Meli, y sus asistentes de IA), para continuar con los
+Módulos 7 y 8.
+**Última actualización:** 2026-08-06 — Módulos 1 a 6 completos.
 
 Este documento resume todo lo que existe hasta ahora: qué se decidió, por qué, cómo está
 armado el código, y qué convenciones hay que seguir para que los módulos nuevos encajen sin
@@ -44,6 +45,10 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
   incluye la política de bajas que quedó pendiente del Módulo 4 (sección 1) y las ocho decisiones
   de modelado (sección 2).
 - `docs/superpowers/plans/2026-08-05-modulo-5-expediente-clinico-plan.md` — plan TDD del Módulo 5.
+- `docs/superpowers/specs/2026-08-06-modulo-6-facturacion-design.md` — spec del Módulo 6, incluye
+  la nota explícita de por qué no se implementa facturación electrónica (sección 2) y la tabla de
+  decisiones de modelado con su justificación.
+- `docs/superpowers/plans/2026-08-06-modulo-6-facturacion-plan.md` — plan TDD del Módulo 6.
 
 ---
 
@@ -56,13 +61,13 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 | 3 | Parámetros por clínica (`Especialidad`, `Consultorio`, `MetodoPago`, horario de atención, configuración) | **Meli** | ✅ Completo |
 | 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ✅ Completo |
 | 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, presupuestos, recetas) | **Meli** | ✅ Completo, verificado contra MySQL real |
-| 6 | Facturación extendida | Christian | ⬜ Pendiente |
+| 6 | Facturación extendida | Christian | ✅ Completo, verificado contra MySQL real |
 | 7 | Dashboards y métricas | Christian | ⬜ Pendiente |
 | 8 | Notificaciones y recordatorios | Sin asignar | ⬜ Pendiente |
 
-**Tu bloque (Meli) está completo hasta el Módulo 5.** El Módulo 6 (Christian) ahora puede apoyarse en
-`PlanTratamiento` y `Presupuesto` de este módulo para "presupuesto → factura", además de en `Paciente`
-y `Cita` del Módulo 4.
+**Módulos 1 a 6 completos.** Quedan el 7 (Dashboards) y el 8 (Notificaciones), ambos de Christian
+por ahora — el 8 estaba "sin asignar (el que termine primero)" y con Meli habiendo cerrado hasta
+el Módulo 5, le queda a Christian salvo que se reasigne.
 
 ---
 
@@ -509,6 +514,61 @@ la verificación funcional ya no es una duda abierta.
 de "presupuesto → factura" — `Presupuesto.monto_total` ya está calculado, solo falta convertirlo en
 `Factura` con impuesto y numeración. En el Módulo 7, `Consulta` y `PlanTratamientoDetalle.estado` dan
 métricas de qué se atendió y qué se completó, además de las que ya daba `Cita`.
+
+---
+
+## 6quinquies. Qué existe ya — Módulo 6 (Facturación Extendida)
+
+**Modelos nuevos** (`app/models/factura.py`, migración `0006`):
+- `Factura` — `id_clinica`, `id_paciente`, `id_doctor` (nullable), `id_asistente` (nullable,
+  quién la emitió), `id_plan` (nullable, único — 1:1 opcional con `PlanTratamiento`),
+  `numero_factura` (único por clínica), `monto_subtotal`/`monto_impuesto`/`monto_total`
+  (congelados al emitir, misma foto-del-momento que `Cita.duracion_minutos` y
+  `PlanTratamientoDetalle.precio_unitario`), `estado` (`EstadoFactura`).
+- `FacturaDetalle` y `Pago` — child de `Factura`, **sin** `id_clinica` propio, aislados vía
+  `JOIN` contra `Factura` — mismo criterio que `PlanTratamientoDetalle` del Módulo 5.
+  `FacturaRepository` sí hereda `BaseRepository` (PK simple, `id_clinica` directo);
+  `FacturaDetalleRepository`/`PagoRepository` no.
+- `EstadoFactura`: `pendiente | parcial | pagada | anulada`. Los primeros tres se **derivan** de
+  `suma(Pago.monto)` vs. `monto_total`; `anulada` es la única transición manual, y solo si la
+  factura no tiene pagos registrados (`FacturaConPagosError` → 409 si los tiene).
+
+**`numero_factura` es un correlativo interno, no un DTE (Documento Tributario Electrónico).**
+Decisión explícita del spec: no se implementa facturación electrónica en este módulo. Si en el
+futuro se agrega (obligatoria en El Salvador), va con una migración nueva de columnas nullable
+(`codigo_generacion`, `sello_recibido`, etc.) — nada de este diseño la bloquea.
+
+**`FacturaService._emitir` es el punto único de cálculo**, usado tanto por
+`generar_desde_presupuesto` (copia líneas de un `Presupuesto` en estado `ACEPTADO`, si no lanza
+`PresupuestoNoAceptadoError` → 409) como por `crear_suelta` (líneas ad-hoc, precio copiado del
+catálogo `Tratamiento` en el momento). Ahí se calcula `subtotal`/`impuesto` (de
+`ConfiguracionClinica.porcentaje_impuesto`, Módulo 3) /`total`, se arma `numero_factura` a partir
+de `prefijo_factura` + `proximo_numero_factura`, y **se incrementa el correlativo en la misma
+transacción** — mismo patrón `try`/`except`+`db.rollback()` que `ClinicaService`/`PersonalService`.
+No hay lock explícito sobre el correlativo (deuda conocida y aceptada, sección 8 del spec del
+Módulo 6): con una sola recepcionista cobrando el riesgo de colisión es despreciable.
+
+**`PagoService.registrar_pago`** rechaza pagos sobre una factura `anulada`
+(`FacturaAnuladaError` → 409) y pagos que exceden el saldo pendiente (`PagoExcedeSaldoError` →
+422); al insertar el pago, recalcula y guarda el nuevo estado de la factura.
+
+**Endpoints:** `POST /planes-tratamiento/{id_plan}/factura` (anidado en el router del Módulo 5,
+no en `/facturas` — mismo criterio que `/planes-tratamiento/{id_plan}/presupuesto`),
+`POST /facturas` (suelta), `GET /facturas`, `GET /facturas/{id}`, `PATCH /facturas/{id}/anular`,
+`POST`/`GET /facturas/{id}/pagos`.
+
+**Permisos:** superadmin/admin/asistente escriben (facturar, anular, cobrar); **doctor solo lee,
+y solo las suyas** — `GET /facturas` filtra por `id_doctor` propio vía `WHERE`, y una factura
+ajena por id da **404** (no 403), mismo criterio que `GET /citas` del Módulo 4.
+
+**Verificado contra MySQL real (2026-08-06):** migración `0006` limpia, enum `estado_factura` en
+minúscula, flujo completo plan→presupuesto aceptado→factura (impuesto 13% calculado bien,
+numeración `F000001`→`F000002` correlativa)→pago parcial (`parcial`)→pago que completa el saldo
+(`pagada`)→anular con pagos bloqueado (`409`)→sobrepago bloqueado (`422`)→factura suelta y
+anulación sin pagos (`200`), todo probado por HTTP contra el contenedor real.
+
+**Lo que este módulo habilita:** en el Módulo 7, `FacturaRepository`/`PagoRepository` dan
+ingresos por período, por doctor, por método de pago, y facturas pendientes de cobro.
 
 ---
 
