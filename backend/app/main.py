@@ -9,6 +9,7 @@ from app.api.routes.consultas import router as consultas_router
 from app.api.routes.consultorios import router as consultorios_router
 from app.api.routes.doctores import router as doctores_router
 from app.api.routes.especialidades import router as especialidades_router
+from app.api.routes.facturas import router as facturas_router
 from app.api.routes.horarios import router as horarios_router
 from app.api.routes.metodos_pago import router as metodos_pago_router
 from app.api.routes.odontogramas import router as odontogramas_router
@@ -36,3 +37,4 @@ app.include_router(odontogramas_router)
 app.include_router(planes_tratamiento_router)
 app.include_router(presupuestos_router)
 app.include_router(recetas_router)
+app.include_router(facturas_router)

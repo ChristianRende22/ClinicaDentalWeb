@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_roles, resolve_clinica_id
+from app.api.deps import get_current_user, require_roles, resolve_clinica_id
 from app.db import get_db
-from app.exceptions import ReferenciaInvalidaError, TransicionInvalidaError
+from app.exceptions import (
+    PresupuestoNoAceptadoError,
+    ReferenciaInvalidaError,
+    TransicionInvalidaError,
+)
 from app.models import RolUsuario
+from app.repositories.asistente_repository import AsistenteRepository
 from app.repositories.plan_tratamiento_repository import (
     PlanTratamientoDetalleRepository,
     PlanTratamientoRepository,
 )
+from app.schemas.factura import FacturaResponse
 from app.schemas.plan_tratamiento import (
     CambiarEstadoDetalleRequest,
     CambiarEstadoPlanRequest,
@@ -18,6 +24,7 @@ from app.schemas.plan_tratamiento import (
     PlanTratamientoResponse,
 )
 from app.schemas.presupuesto import PresupuestoResponse
+from app.services.factura_service import FacturaService
 from app.services.plan_tratamiento_service import PlanTratamientoService
 from app.services.presupuesto_service import PresupuestoService
 
@@ -35,7 +42,7 @@ router = APIRouter(prefix="/planes-tratamiento", tags=["planes-tratamiento"])
 NO_ENCONTRADO = "Plan de tratamiento no encontrado"
 DETALLE_NO_ENCONTRADO = "Detalle no encontrado"
 
-_A_409 = (TransicionInvalidaError,)
+_A_409 = (TransicionInvalidaError, PresupuestoNoAceptadoError)
 _A_422 = (ReferenciaInvalidaError,)
 
 
@@ -209,3 +216,29 @@ def generar_presupuesto(
     presupuesto = PresupuestoService(db).generar_o_regenerar(id_clinica, id_plan)
     db.commit()
     return PresupuestoResponse.model_validate(presupuesto)
+
+
+@router.post(
+    "/{id_plan}/factura",
+    response_model=FacturaResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(ESCRITURA_PRESUPUESTO)],
+)
+def generar_factura(
+    id_plan: int,
+    id_clinica: int = Depends(resolve_clinica_id),
+    usuario=Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FacturaResponse:
+    id_asistente = None
+    if usuario.rol.value == "asistente":
+        perfil = AsistenteRepository(db).obtener_por_usuario(usuario.id_usuario)
+        id_asistente = perfil.id_asistente if perfil else None
+
+    try:
+        factura = FacturaService(db).generar_desde_presupuesto(id_clinica, id_plan, id_asistente)
+    except (*_A_409, *_A_422) as error:
+        raise _traducir(error)
+    if factura is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NO_ENCONTRADO)
+    return FacturaResponse.model_validate(factura)
