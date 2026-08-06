@@ -6,6 +6,7 @@ from app.models.cita import (
     EstadoCita,
 )
 from app.models.clinica import Clinica, ClinicaModulo, EstadoClinica
+from app.models.factura import EstadoFactura, Factura, FacturaDetalle, Pago
 from app.models.expediente import (
     Consulta,
     Diagnostico,
@@ -83,4 +84,8 @@ __all__ = [
     "TRANSICIONES_PRESUPUESTO_PERMITIDAS",
     "Receta",
     "RecetaDetalle",
+    "Factura",
+    "FacturaDetalle",
+    "Pago",
+    "EstadoFactura",
 ]

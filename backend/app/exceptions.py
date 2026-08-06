@@ -56,3 +56,20 @@ class ReferenciaEnUsoError(Exception):
     spec de ese modulo): bloquear la baja si hay referencias activas, en vez
     de dejarla en el aire o cancelar en cascada.
     """
+
+
+class PresupuestoNoAceptadoError(Exception):
+    """No se puede generar una factura: el presupuesto de este plan todavia
+    no fue aceptado por el paciente."""
+
+
+class FacturaConPagosError(Exception):
+    """No se puede anular: la factura ya tiene pagos registrados."""
+
+
+class FacturaAnuladaError(Exception):
+    """No se pueden registrar pagos sobre una factura anulada."""
+
+
+class PagoExcedeSaldoError(Exception):
+    """El monto del pago es mayor al saldo pendiente de la factura."""
