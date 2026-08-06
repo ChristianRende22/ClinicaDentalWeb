@@ -1,0 +1,213 @@
+{
+  "main": {
+    "id": "1792c75d839fec5e",
+    "type": "split",
+    "children": [
+      {
+        "id": "d7b8f9b3fb652e33",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "9f36d00dbd18fb7c",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Roadmap.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Roadmap"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "962841becbe4fe68",
+    "type": "split",
+    "children": [
+      {
+        "id": "af4c892bc2c31b37",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "5969f0a033760f02",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "6c974369d48b44f9",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "b34623efd5fc9590",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "c382d90d6beabd00",
+    "type": "split",
+    "children": [
+      {
+        "id": "0bb5b573b0dde44a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "ae01cb1c430d13c6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Roadmap.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Roadmap"
+            }
+          },
+          {
+            "id": "29bfbf00bf1e6d74",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Roadmap.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Roadmap"
+            }
+          },
+          {
+            "id": "1c4b2a890e9d1b13",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "1812e9e47d5c94bc",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "bd338289df4e9ef1",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Roadmap.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Roadmap"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "9f36d00dbd18fb7c",
+  "lastOpenFiles": [
+    "Convenciones de Arquitectura.md",
+    "ClinicaDentalWeb - Mapa del Proyecto.md",
+    "Bugs Conocidos.md",
+    "Roadmap.md",
+    "Modulo 8 - Notificaciones.md",
+    "Modulo 7 - Dashboards.md",
+    "Modulo 7 - Dashboards.md.tmp.30604.38dc659e0a6a",
+    "Modulo 6 - Facturacion Extendida.md",
+    "Modulo 6 - Facturacion Extendida.md.tmp.30604.d01d8e60bc74",
+    "Modulo 5 - Expediente Clinico Avanzado.md",
+    "Modulo 5 - Expediente Clinico Avanzado.md.tmp.30604.49926a996ff7",
+    "Modulo 4 - Operacion Clinica Basica.md",
+    "Modulo 3 - Parametros por Clinica.md",
+    "Modulo 3 - Parametros por Clinica.md.tmp.30604.9caa6bbbb029",
+    "Equipo.md",
+    "Modulo 2 - Panel Superadmin.md",
+    "Modulo 2 - Panel Superadmin.md.tmp.30604.7d4a616aee39",
+    "Modulo 1 - Tenancy y Auth.md",
+    "Flujo de Trabajo con Claude.md",
+    "Referencias Externas.md",
+    "Equipo.md.tmp.30604.e7388c4d6120",
+    "Roadmap.md.tmp.30604.d228632a9efb",
+    "Welcome.md",
+    "ClinicaDentalWeb - Mapa del Proyecto.md.tmp.30604.422169f5ac50"
+  ]
+}
