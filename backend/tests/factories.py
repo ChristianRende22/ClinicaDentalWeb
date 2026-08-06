@@ -117,3 +117,64 @@ def crear_cita(db, id_clinica, id_paciente, id_doctor, **campos):
     db.add(cita)
     db.flush()
     return cita
+
+
+def crear_tratamiento(db, id_clinica, **campos):
+    from app.models import Tratamiento
+
+    datos = {"nombre": "Limpieza dental", "precio": "25.00"}
+    datos.update(campos)
+    tratamiento = Tratamiento(id_clinica=id_clinica, **datos)
+    db.add(tratamiento)
+    db.flush()
+    return tratamiento
+
+
+def crear_metodo_pago(db, id_clinica, **campos):
+    from app.models import MetodoPago
+
+    datos = {"nombre": "Efectivo"}
+    datos.update(campos)
+    metodo = MetodoPago(id_clinica=id_clinica, **datos)
+    db.add(metodo)
+    db.flush()
+    return metodo
+
+
+def crear_plan_aceptado_con_presupuesto(db, id_clinica, id_paciente, id_doctor, id_tratamiento, cantidad=1):
+    """Arma un PlanTratamiento con un detalle y su Presupuesto ya en estado
+    ACEPTADO -- el punto de partida que FacturaService.generar_desde_presupuesto
+    necesita.
+    """
+    from decimal import Decimal
+
+    from app.models import (
+        EstadoPresupuesto,
+        PlanTratamiento,
+        PlanTratamientoDetalle,
+        Presupuesto,
+        Tratamiento,
+    )
+
+    plan = PlanTratamiento(id_clinica=id_clinica, id_paciente=id_paciente, id_doctor=id_doctor)
+    db.add(plan)
+    db.flush()
+
+    tratamiento = db.get(Tratamiento, id_tratamiento)
+    detalle = PlanTratamientoDetalle(
+        id_plan=plan.id_plan,
+        id_tratamiento=id_tratamiento,
+        cantidad=cantidad,
+        precio_unitario=tratamiento.precio,
+    )
+    db.add(detalle)
+
+    presupuesto = Presupuesto(
+        id_clinica=id_clinica,
+        id_plan=plan.id_plan,
+        monto_total=str(Decimal(str(tratamiento.precio)) * cantidad),
+        estado=EstadoPresupuesto.ACEPTADO,
+    )
+    db.add(presupuesto)
+    db.flush()
+    return plan, detalle, presupuesto
