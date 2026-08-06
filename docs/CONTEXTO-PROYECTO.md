@@ -55,7 +55,7 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 | 2 | Panel superadministrador (CRUD clínicas, admin principal, feature flags) | Christian | ✅ Completo |
 | 3 | Parámetros por clínica (`Especialidad`, `Consultorio`, `MetodoPago`, horario de atención, configuración) | **Meli** | ✅ Completo |
 | 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ✅ Completo |
-| 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, presupuestos, recetas) | **Meli** | ✅ Completo (falta correr contra MySQL real, ver sección 6quater) |
+| 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, presupuestos, recetas) | **Meli** | ✅ Completo, verificado contra MySQL real |
 | 6 | Facturación extendida | Christian | ⬜ Pendiente |
 | 7 | Dashboards y métricas | Christian | ⬜ Pendiente |
 | 8 | Notificaciones y recordatorios | Sin asignar | ⬜ Pendiente |
@@ -492,13 +492,18 @@ ReferenciaEnUsoError` que faltaba en ambos routers. Regresión a nivel de ruta e
 (`test_paciente_repository_baja_modulo5.py`, `test_personal_service_baja_modulo5.py`) nunca pasaban
 por las rutas reales, por eso no lo detectaron.
 
-**Verificación pendiente antes de cerrar el módulo del todo:** correr `alembic upgrade head` contra
-MySQL real en Docker y confirmar en minúscula los cuatro enums nuevos (`estado_pieza_dental`,
-`estado_plan_tratamiento`, `estado_detalle_plan_tratamiento`, `estado_presupuesto`).
-`docs/postman/ClinicaDentalWeb-Modulo5.postman_collection.json` ya está armada, siguiendo la
-estructura de la del Módulo 4 (carpeta `0. Setup` que encadena tokens, ejecutable de punta a punta
-con Run Collection) — falta correrla contra MySQL real para la verificación final (Task 11 del plan
-del Módulo 5).
+**Verificación contra MySQL real: hecha (2026-08-06).** `alembic upgrade head` corrió limpio
+(`0002 → 0003 → 0004 → 0005`) y los cuatro enums nuevos quedaron en minúscula
+(`estado_pieza_dental`, `estado_plan_tratamiento`, `estado_detalle_plan_tratamiento`,
+`estado_presupuesto`) — sin el bug de `values_callable`. Smoke test end-to-end vía HTTP: crear
+clínica+admin → doctor → paciente → tratamiento → plan de tratamiento → detalle (el precio se
+copia del catálogo, `25.00 x2` quedó congelado en el detalle) → generar presupuesto
+(`monto_total: 50.00`, calculado bien) → odontograma con las 32 piezas por defecto. También se
+confirmó el fix de bajas bloqueadas: `DELETE /pacientes/{id}` y
+`PUT /pacientes/{id}` con `{"activo": false}` devuelven ambos `409` cuando el paciente tiene un
+plan de tratamiento activo. Falta correr la colección de Postman completa
+(`docs/postman/ClinicaDentalWeb-Modulo5.postman_collection.json`) para cobertura exhaustiva, pero
+la verificación funcional ya no es una duda abierta.
 
 **Lo que este módulo habilita:** en el Módulo 6, `PlanTratamiento` y `Presupuesto` son la base directa
 de "presupuesto → factura" — `Presupuesto.monto_total` ya está calculado, solo falta convertirlo en
