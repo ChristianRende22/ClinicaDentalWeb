@@ -12,7 +12,9 @@ Cómo se construye cada módulo. Ver [[Equipo]] — ambos (Christian y Meli) sig
    commitea.
 3. **Plan TDD** — a `docs/superpowers/plans/YYYY-MM-DD-modulo-N-<nombre>-plan.md`, bite-sized,
    cada paso con código real, y se commitea.
-4. **Ejecución inline** — no subagentes, Christian quiere ver todo pasar en la misma sesión.
+4. **Ejecución** — desde el Módulo 7 en adelante, **subagent-driven** (subagente implementador +
+   revisor por tarea, revisión final de branch): cambio explícito confirmado al arrancar el
+   Módulo 7 (2026-08-08), reemplaza la ejecución inline que se usó en los Módulos 1-6.
 5. **Verificación contra Docker/MySQL real** — obligatoria antes de dar el módulo por cerrado
    (ver [[Bugs Conocidos]]).
 6. **Actualizar `docs/CONTEXTO-PROYECTO.md`** con una sección nueva del módulo.
@@ -21,9 +23,12 @@ Cómo se construye cada módulo. Ver [[Equipo]] — ambos (Christian y Meli) sig
 
 ## Reglas de commit (corregidas varias veces, no improvisar)
 
-- **No commitear nada durante la ejecución.** Se escribe y testea todo, pero queda sin
-  commitear. Solo se commitea (y recién ahí se pushea) cuando Christian lo dice explícitamente
-  ("commiteá y pusheá el módulo N").
+- **Bajo ejecución inline (Módulos 1-6):** no se commitea nada durante la ejecución. Se escribe y
+  testea todo, pero queda sin commitear. Solo se commitea (y recién ahí se pushea) cuando
+  Christian lo dice explícitamente ("commiteá y pusheá el módulo N").
+- **Bajo subagent-driven (Módulo 7 en adelante):** cada subagente de tarea commitea su propia
+  tarea como parte del flujo normal del skill — no se espera un ok aparte para esos commits.
+  El `git push` sigue necesitando el ok explícito de Christian en cualquier modo.
 - Cuando se commitea: **un commit por tarea del plan**, no uno gigante.
 - **Nunca poner `Co-Authored-By: Claude` ni ninguna atribución de Claude/Anthropic** en los
   mensajes de commit. Regla permanente, no solo para el commit del momento.
