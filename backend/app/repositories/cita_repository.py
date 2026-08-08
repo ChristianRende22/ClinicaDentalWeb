@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.models import ESTADOS_ACTIVOS, Cita, EstadoCita
+from app.models import ESTADOS_ACTIVOS, Cita, Doctor, EstadoCita
 from app.repositories.base import BaseRepository
 
 #: Duracion maxima que puede tener una cita, en minutos. Es el mismo tope que
@@ -134,3 +134,57 @@ class CitaRepository(BaseRepository[Cita]):
     ) -> bool:
         solapadas = self._solapadas(id_clinica, inicio, fin, excluir_id_cita)
         return any(c.id_consultorio == id_consultorio for c in solapadas)
+
+    def resumen_por_estado(
+        self,
+        id_clinica: int,
+        desde: datetime | None = None,
+        hasta: datetime | None = None,
+        id_doctor: int | None = None,
+        incluir_por_doctor: bool = True,
+    ) -> dict:
+        """Cuenta citas agrupadas por estado (y opcionalmente por doctor) para
+        el dashboard del Modulo 7. Mismos filtros que listar(), pero agregados
+        en SQL con GROUP BY en vez de traer las filas y contarlas en Python.
+        """
+        filtros = [Cita.id_clinica == id_clinica]
+        if desde is not None:
+            filtros.append(Cita.fecha_hora >= desde)
+        if hasta is not None:
+            filtros.append(Cita.fecha_hora <= hasta)
+        if id_doctor is not None:
+            filtros.append(Cita.id_doctor == id_doctor)
+
+        stmt_estado = (
+            select(Cita.estado, func.count(Cita.id_cita)).where(*filtros).group_by(Cita.estado)
+        )
+        por_estado = {estado.value: 0 for estado in EstadoCita}
+        total = 0
+        for estado, conteo in self.db.execute(stmt_estado).all():
+            por_estado[estado.value] = conteo
+            total += conteo
+
+        por_doctor: list[dict] = []
+        if incluir_por_doctor:
+            stmt_doctor = (
+                select(Cita.id_doctor, Doctor.nombre, Doctor.apellido, Cita.estado, func.count(Cita.id_cita))
+                .join(Doctor, Cita.id_doctor == Doctor.id_doctor)
+                .where(*filtros)
+                .group_by(Cita.id_doctor, Doctor.nombre, Doctor.apellido, Cita.estado)
+            )
+            acumulado: dict[int, dict] = {}
+            for id_doc, nombre, apellido, estado, conteo in self.db.execute(stmt_doctor).all():
+                entrada = acumulado.setdefault(
+                    id_doc,
+                    {
+                        "id_doctor": id_doc,
+                        "nombre": f"{nombre} {apellido}",
+                        "total": 0,
+                        "por_estado": {e.value: 0 for e in EstadoCita},
+                    },
+                )
+                entrada["por_estado"][estado.value] = conteo
+                entrada["total"] += conteo
+            por_doctor = sorted(acumulado.values(), key=lambda d: d["id_doctor"])
+
+        return {"total": total, "por_estado": por_estado, "por_doctor": por_doctor}
