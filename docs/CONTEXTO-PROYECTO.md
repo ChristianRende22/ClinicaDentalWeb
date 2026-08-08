@@ -49,6 +49,10 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
   la nota explícita de por qué no se implementa facturación electrónica (sección 2) y la tabla de
   decisiones de modelado con su justificación.
 - `docs/superpowers/plans/2026-08-06-modulo-6-facturacion-plan.md` — plan TDD del Módulo 6.
+- `docs/superpowers/specs/2026-08-08-modulo-7-dashboards-design.md` — spec del Módulo 7, incluye
+  el split de permisos por tipo de métrica y la decisión de agrupar fechas en SQL con rama por
+  dialecto.
+- `docs/superpowers/plans/2026-08-08-modulo-7-dashboards-plan.md` — plan TDD del Módulo 7.
 
 ---
 
@@ -62,12 +66,12 @@ Cuando armes el spec/plan de tu módulo, seguí el mismo formato y ubicación
 | 4 | Operación clínica básica (Pacientes, Odontólogos, Asistentes, Citas) | **Meli** | ✅ Completo |
 | 5 | Expediente clínico avanzado (diagnósticos, odontogramas, planes de tratamiento, presupuestos, recetas) | **Meli** | ✅ Completo, verificado contra MySQL real |
 | 6 | Facturación extendida | Christian | ✅ Completo, verificado contra MySQL real |
-| 7 | Dashboards y métricas | Christian | ⬜ Pendiente |
+| 7 | Dashboards y métricas | Christian | ✅ Completo, verificado contra MySQL real |
 | 8 | Notificaciones y recordatorios | Sin asignar | ⬜ Pendiente |
 
-**Módulos 1 a 6 completos.** Quedan el 7 (Dashboards) y el 8 (Notificaciones), ambos de Christian
-por ahora — el 8 estaba "sin asignar (el que termine primero)" y con Meli habiendo cerrado hasta
-el Módulo 5, le queda a Christian salvo que se reasigne.
+**Módulos 1 a 7 completos.** Queda el 8 (Notificaciones), sin asignar formalmente — con Meli
+habiendo cerrado hasta el Módulo 5 y Christian el 6 y el 7, le queda a quien lo tome primero salvo
+que se reasigne.
 
 ---
 
@@ -569,6 +573,73 @@ anulación sin pagos (`200`), todo probado por HTTP contra el contenedor real.
 
 **Lo que este módulo habilita:** en el Módulo 7, `FacturaRepository`/`PagoRepository` dan
 ingresos por período, por doctor, por método de pago, y facturas pendientes de cobro.
+
+---
+
+## 6sexies. Qué existe ya — Módulo 7 (Dashboards y Métricas)
+
+**Sin modelos ni migraciones nuevas.** Los tres endpoints agregan datos ya existentes de `Cita`
+(Módulo 4) y `Factura`/`Pago` (Módulo 6).
+
+**Sin `DashboardService`.** Son lecturas puras que no coordinan una transacción — no encajan en el
+criterio que el proyecto usa para justificar un service. Se agregaron métodos de agregación
+directo a los repositorios existentes:
+
+- `CitaRepository.resumen_por_estado(id_clinica, desde=None, hasta=None, id_doctor=None,
+  incluir_por_doctor=True)` — cuenta citas por estado (`GROUP BY estado`) y opcionalmente por
+  doctor, en SQL.
+- `PagoRepository.totales_por_periodo(id_clinica, desde=None, hasta=None, agrupar_por="dia")` —
+  ingresos **cobrados** (`SUM(Pago.monto)`, no facturado), por método de pago y en una serie
+  temporal agrupable por día/semana/mes.
+- `FacturaRepository.listar_pendientes(id_clinica, desde=None, hasta=None)` — facturas en estado
+  `pendiente`/`parcial` con su saldo pendiente calculado (`monto_total - SUM(Pago.monto)`).
+
+**Riesgo aceptado y verificado: agrupación de fechas en SQL con rama por dialecto.**
+`PagoRepository._expr_periodo` usa `func.strftime` en SQLite (tests) y `func.date_format` en MySQL
+(producción) para truncar `Pago.fecha_pago` a día/semana/mes. Es la misma familia de riesgo que
+documenta `CitaRepository._solapadas` (que lo resuelve calculando en Python) — acá se aceptó el
+riesgo por eficiencia. **Verificado contra MySQL real (2026-08-08):** los tres `agrupar_por`
+(`dia`, `semana`, `mes`) probados por HTTP contra el contenedor real devolvieron `200` con series
+correctas, sin error de SQL — el caso que la suite de SQLite no puede probar porque
+`func.date_format` no existe en SQLite y `func.strftime` no existe en MySQL.
+
+**Permisos, divididos por tipo de métrica, no una regla única** (a diferencia del Módulo 3):
+
+| Endpoint | Superadmin/Admin | Asistente | Doctor |
+|---|---|---|---|
+| `GET /dashboard/citas/resumen` | Sí, toda la clínica | Sí, toda la clínica | Sí, **solo lo suyo** |
+| `GET /dashboard/ingresos` | Sí | No (`403`) | No (`403`) |
+| `GET /dashboard/facturas-pendientes` | Sí | No (`403`) | No (`403`) |
+
+Mismo criterio que Módulo 4/6 para el filtro del doctor: `WHERE id_doctor = <el suyo>` inyectado
+vía `get_doctor_actual`, no un `403` — y la ausencia de perfil cierra a "no ve nada" (`total: 0`),
+no abre a "ve todo". Verificado por HTTP: un doctor sin perfil (rol `DOCTOR` sin fila `Doctor`)
+recibe `total: 0`, y un doctor con perfil ve solo sus propias citas con `por_doctor: []`.
+
+**Rangos de fecha — dos comportamientos distintos a propósito:**
+- `/dashboard/citas/resumen` y `/dashboard/ingresos`: `desde`/`hasta` con default el mes actual si
+  no se pasan — el caso más común es "el dashboard de ahora".
+- `/dashboard/facturas-pendientes`: `desde`/`hasta` opcionales **sin default** (sin límite si no se
+  pasan) — una factura pendiente de hace meses sigue siendo cobrable hoy, no tiene sentido ocultarla
+  por un filtro de fecha implícito.
+
+**Endpoints:** `GET /dashboard/citas/resumen`, `GET /dashboard/ingresos`,
+`GET /dashboard/facturas-pendientes` — los tres en `app/api/routes/dashboards.py`, prefijo
+`/dashboard`.
+
+**Verificado contra MySQL real (2026-08-08):** migración limpia (sin cambios de esquema, sigue en
+`0006`), flujo completo con clínica nueva → doctor con horario → paciente → factura suelta →
+dos pagos parciales (`80.00` cobrados sobre `113.00`) → segunda factura sin pagar. Los tres
+endpoints devolvieron datos correctos por HTTP: `citas/resumen` con el conteo y desglose por
+doctor esperado, `ingresos` con el total (`80.00`) y desglose por método de pago correcto en los
+tres `agrupar_por`, `facturas-pendientes` con el saldo pendiente calculado bien
+(`113.00 - 80.00 = 33.00`) y el total agregado (`89.50` entre las dos facturas). Permisos
+confirmados con el rol doctor: `200` filtrado en citas, `403` en los dos endpoints financieros.
+
+**Deuda conocida y decidida a conciencia:** no se agregó una cuarta métrica de tratamientos/
+consultas (`Consulta`, `PlanTratamientoDetalle.estado`) aunque los datos ya están listos desde el
+Módulo 5 — decisión explícita del brainstorming para no ampliar el alcance original del módulo.
+Queda disponible para una extensión futura si se pide.
 
 ---
 

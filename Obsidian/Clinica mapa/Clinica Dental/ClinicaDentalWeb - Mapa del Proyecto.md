@@ -30,8 +30,8 @@ Ver [[Roadmap]] para la tabla completa con estado y dependencias entre módulos.
 - [[Modulo 4 - Operacion Clinica Basica]] ✅
 - [[Modulo 5 - Expediente Clinico Avanzado]] ✅
 - [[Modulo 6 - Facturacion Extendida]] ✅
-- [[Modulo 7 - Dashboards]] ⬜ siguiente
-- [[Modulo 8 - Notificaciones]] ⬜
+- [[Modulo 7 - Dashboards]] ✅
+- [[Modulo 8 - Notificaciones]] ⬜ siguiente
 
 ## Conceptos transversales
 
@@ -45,7 +45,7 @@ Abrí Claude Code en `C:\Christian\Personal\ClinicaDentalWeb` y decile:
 
 > "Leé el vault de Obsidian en `Obsidian/Clinica mapa/Clinica Dental`, empezando por
 > `ClinicaDentalWeb - Mapa del Proyecto.md`, y `docs/CONTEXTO-PROYECTO.md`. Vamos a seguir con el
-> Módulo 7 (Dashboards)."
+> Módulo 8 (Notificaciones)."
 
 **Regla permanente: cada vez que se termina un módulo nuevo, se crea/actualiza su nota acá
 mismo, enlazada a este mapa y a los módulos de los que depende — no queda como nota suelta.**
