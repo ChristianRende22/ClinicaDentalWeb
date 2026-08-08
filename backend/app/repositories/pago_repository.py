@@ -120,7 +120,7 @@ class PagoRepository:
             .order_by(periodo_expr)
         )
         serie = [
-            {"periodo": periodo, "monto": Decimal(str(monto))}
+            {"periodo": str(periodo), "monto": Decimal(str(monto))}
             for periodo, monto in self.db.execute(stmt_serie).all()
         ]
 
