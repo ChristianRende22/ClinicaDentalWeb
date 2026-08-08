@@ -9,8 +9,13 @@ from app.api.deps import get_current_user, get_doctor_actual, resolve_clinica_id
 from app.db import get_db
 from app.models import Doctor, EstadoCita, RolUsuario, Usuario
 from app.repositories.cita_repository import CitaRepository
+from app.repositories.factura_repository import FacturaRepository
 from app.repositories.pago_repository import PagoRepository
-from app.schemas.dashboard import ResumenCitasResponse, ResumenIngresosResponse
+from app.schemas.dashboard import (
+    FacturasPendientesResponse,
+    ResumenCitasResponse,
+    ResumenIngresosResponse,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -81,3 +86,17 @@ def resumen_ingresos(
         id_clinica, desde=desde, hasta=hasta, agrupar_por=agrupar_por
     )
     return ResumenIngresosResponse(desde=desde, hasta=hasta, agrupar_por=agrupar_por, **resultado)
+
+
+@router.get(
+    "/facturas-pendientes", response_model=FacturasPendientesResponse,
+    dependencies=[Depends(VER_FINANCIERO)],
+)
+def facturas_pendientes(
+    desde: date | None = None,
+    hasta: date | None = None,
+    id_clinica: int = Depends(resolve_clinica_id),
+    db: Session = Depends(get_db),
+) -> FacturasPendientesResponse:
+    resultado = FacturaRepository(db).listar_pendientes(id_clinica, desde=desde, hasta=hasta)
+    return FacturasPendientesResponse(**resultado)

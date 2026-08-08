@@ -192,3 +192,70 @@ def test_ingresos_agrupar_por_invalido_da_422(client, db_session):
     )
 
     assert respuesta.status_code == 422
+
+
+def test_facturas_pendientes_requiere_login(client):
+    respuesta = client.get("/dashboard/facturas-pendientes")
+
+    assert respuesta.status_code == 401
+
+
+def test_asistente_no_puede_ver_facturas_pendientes(client, db_session):
+    from app.models import RolUsuario
+
+    clinica = crear_clinica(db_session)
+    db_session.commit()
+    headers = headers_de(db_session, clinica.id_clinica, RolUsuario.ASISTENTE)
+
+    respuesta = client.get("/dashboard/facturas-pendientes", headers=headers)
+
+    assert respuesta.status_code == 403
+
+
+def test_admin_ve_facturas_pendientes(client, db_session):
+    from app.models import RolUsuario
+    from app.repositories.factura_repository import FacturaRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    FacturaRepository(db_session).crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "60.00", "monto_impuesto": "0.00", "monto_total": "60.00"},
+    )
+    db_session.commit()
+    headers = headers_de(db_session, clinica.id_clinica, RolUsuario.ADMIN)
+
+    respuesta = client.get("/dashboard/facturas-pendientes", headers=headers)
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["resumen"]["cantidad"] == 1
+    assert cuerpo["facturas"][0]["saldo_pendiente"] == "60.00"
+
+
+def test_facturas_pendientes_no_mezcla_clinicas(client, db_session):
+    from app.models import RolUsuario
+    from app.repositories.factura_repository import FacturaRepository
+
+    clinica_a = crear_clinica(db_session, nombre="Dental A")
+    clinica_b = crear_clinica(db_session, nombre="Dental B")
+    paciente_a = crear_paciente(db_session, clinica_a.id_clinica)
+    paciente_b = crear_paciente(db_session, clinica_b.id_clinica)
+    FacturaRepository(db_session).crear(
+        clinica_a.id_clinica,
+        {"id_paciente": paciente_a.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "10.00", "monto_impuesto": "0.00", "monto_total": "10.00"},
+    )
+    FacturaRepository(db_session).crear(
+        clinica_b.id_clinica,
+        {"id_paciente": paciente_b.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "999.00", "monto_impuesto": "0.00", "monto_total": "999.00"},
+    )
+    db_session.commit()
+    headers = headers_de(db_session, clinica_a.id_clinica, RolUsuario.ADMIN)
+
+    respuesta = client.get("/dashboard/facturas-pendientes", headers=headers)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["resumen"]["cantidad"] == 1
