@@ -1,6 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
-from tests.factories import crear_clinica, crear_cita, crear_doctor, crear_paciente
+import pytest
+
+from tests.factories import crear_clinica, crear_cita, crear_doctor, crear_paciente, crear_metodo_pago
 
 
 def test_resumen_por_estado_cuenta_por_estado_y_total(db_session):
@@ -145,3 +148,167 @@ def test_resumen_por_estado_no_mezcla_clinicas(db_session):
     resumen = CitaRepository(db_session).resumen_por_estado(clinica_a.id_clinica)
 
     assert resumen["total"] == 1
+
+
+def _crear_factura_con_pago(db, id_clinica, id_paciente, id_metodo_pago, monto, fecha_pago, numero="F000001"):
+    from app.models import Factura, Pago
+
+    factura = Factura(
+        id_clinica=id_clinica, id_paciente=id_paciente, numero_factura=numero,
+        monto_subtotal=monto, monto_impuesto="0.00", monto_total=monto,
+    )
+    db.add(factura)
+    db.flush()
+    pago = Pago(
+        id_factura=factura.id_factura, id_metodo_pago=id_metodo_pago, monto=monto,
+        fecha_pago=fecha_pago,
+    )
+    db.add(pago)
+    db.flush()
+    return factura, pago
+
+
+def test_totales_por_periodo_suma_el_total(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "50.00", datetime(2026, 8, 5, 10, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "30.00", datetime(2026, 8, 6, 10, 0), numero="F000002",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(
+        clinica.id_clinica, desde=date(2026, 8, 1), hasta=date(2026, 8, 31),
+    )
+
+    assert resultado["total"] == Decimal("80.00")
+
+
+def test_totales_por_periodo_sin_pagos_es_cero(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(clinica.id_clinica)
+
+    assert resultado["total"] == Decimal("0.00")
+    assert resultado["por_metodo_pago"] == []
+    assert resultado["serie"] == []
+
+
+def test_totales_por_periodo_desglosa_por_metodo_de_pago(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    efectivo = crear_metodo_pago(db_session, clinica.id_clinica, nombre="Efectivo")
+    tarjeta = crear_metodo_pago(db_session, clinica.id_clinica, nombre="Tarjeta")
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, efectivo.id_metodo_pago,
+        "50.00", datetime(2026, 8, 5, 10, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, tarjeta.id_metodo_pago,
+        "30.00", datetime(2026, 8, 6, 10, 0), numero="F000002",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(clinica.id_clinica)
+
+    por_metodo = {fila["id_metodo_pago"]: fila["monto"] for fila in resultado["por_metodo_pago"]}
+    assert por_metodo[efectivo.id_metodo_pago] == Decimal("50.00")
+    assert por_metodo[tarjeta.id_metodo_pago] == Decimal("30.00")
+
+
+def test_totales_por_periodo_filtra_por_rango(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "50.00", datetime(2026, 7, 5, 10, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "30.00", datetime(2026, 8, 5, 10, 0), numero="F000002",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(
+        clinica.id_clinica, desde=date(2026, 8, 1), hasta=date(2026, 8, 31),
+    )
+
+    assert resultado["total"] == Decimal("30.00")
+
+
+def test_totales_por_periodo_serie_agrupada_por_dia(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "20.00", datetime(2026, 8, 5, 9, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "15.00", datetime(2026, 8, 5, 17, 0), numero="F000002",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "10.00", datetime(2026, 8, 6, 9, 0), numero="F000003",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(
+        clinica.id_clinica, agrupar_por="dia",
+    )
+
+    serie = {fila["periodo"]: fila["monto"] for fila in resultado["serie"]}
+    assert len(serie) == 2
+    assert sum(serie.values()) == Decimal("45.00")
+
+
+def test_totales_por_periodo_agrupar_por_invalido_lanza_value_error(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    db_session.commit()
+
+    with pytest.raises(ValueError):
+        PagoRepository(db_session).totales_por_periodo(clinica.id_clinica, agrupar_por="anio")
+
+
+def test_totales_por_periodo_no_mezcla_clinicas(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica_a = crear_clinica(db_session, nombre="Dental A")
+    clinica_b = crear_clinica(db_session, nombre="Dental B")
+    paciente_a = crear_paciente(db_session, clinica_a.id_clinica)
+    paciente_b = crear_paciente(db_session, clinica_b.id_clinica)
+    metodo_a = crear_metodo_pago(db_session, clinica_a.id_clinica)
+    metodo_b = crear_metodo_pago(db_session, clinica_b.id_clinica)
+    _crear_factura_con_pago(
+        db_session, clinica_a.id_clinica, paciente_a.id_paciente, metodo_a.id_metodo_pago,
+        "50.00", datetime(2026, 8, 5, 10, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica_b.id_clinica, paciente_b.id_paciente, metodo_b.id_metodo_pago,
+        "999.00", datetime(2026, 8, 5, 10, 0), numero="F000001",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(clinica_a.id_clinica)
+
+    assert resultado["total"] == Decimal("50.00")

@@ -1,8 +1,11 @@
+from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.models import Factura, Pago
+from app.models import Factura, MetodoPago, Pago
+
+AGRUPACIONES_VALIDAS = ("dia", "semana", "mes")
 
 
 class PagoRepository:
@@ -33,3 +36,79 @@ class PagoRepository:
         for pago in self.listar_de_factura(id_clinica, id_factura):
             total += Decimal(str(pago.monto))
         return total
+
+    def _expr_periodo(self, agrupar_por: str):
+        """Trunca Pago.fecha_pago al periodo pedido, en SQL.
+
+        Rama por dialecto (sqlite en tests, mysql en produccion) porque las
+        funciones de fecha no son portables entre los dos motores -- mismo
+        riesgo que documenta CitaRepository._solapadas, pero aca se acepta a
+        proposito por eficiencia (ver seccion 2.4 del spec del Modulo 7). La
+        verificacion Docker/MySQL antes de cerrar el modulo prueba
+        explicitamente 'semana' y 'mes' contra MySQL real.
+        """
+        dialecto = self.db.bind.dialect.name
+        columna = Pago.fecha_pago
+        formatos_sqlite = {"dia": "%Y-%m-%d", "semana": "%Y-%W", "mes": "%Y-%m"}
+        formatos_mysql = {"dia": "%Y-%m-%d", "semana": "%Y-%u", "mes": "%Y-%m"}
+        if dialecto == "sqlite":
+            return func.strftime(formatos_sqlite[agrupar_por], columna)
+        return func.date_format(columna, formatos_mysql[agrupar_por])
+
+    def totales_por_periodo(
+        self,
+        id_clinica: int,
+        desde: date | None = None,
+        hasta: date | None = None,
+        agrupar_por: str = "dia",
+    ) -> dict:
+        if agrupar_por not in AGRUPACIONES_VALIDAS:
+            raise ValueError(
+                f"agrupar_por invalido: {agrupar_por!r}, debe ser uno de {AGRUPACIONES_VALIDAS}"
+            )
+
+        filtros = [Factura.id_clinica == id_clinica]
+        if desde is not None:
+            filtros.append(Pago.fecha_pago >= datetime.combine(desde, time.min))
+        if hasta is not None:
+            filtros.append(Pago.fecha_pago <= datetime.combine(hasta, time.max))
+
+        total = self.db.execute(
+            select(func.coalesce(func.sum(Pago.monto), 0))
+            .select_from(Pago)
+            .join(Factura, Pago.id_factura == Factura.id_factura)
+            .where(*filtros)
+        ).scalar()
+
+        stmt_metodo = (
+            select(MetodoPago.id_metodo_pago, MetodoPago.nombre, func.sum(Pago.monto))
+            .select_from(Pago)
+            .join(Factura, Pago.id_factura == Factura.id_factura)
+            .join(MetodoPago, Pago.id_metodo_pago == MetodoPago.id_metodo_pago)
+            .where(*filtros)
+            .group_by(MetodoPago.id_metodo_pago, MetodoPago.nombre)
+        )
+        por_metodo_pago = [
+            {"id_metodo_pago": id_, "nombre": nombre, "monto": Decimal(str(monto))}
+            for id_, nombre, monto in self.db.execute(stmt_metodo).all()
+        ]
+
+        periodo_expr = self._expr_periodo(agrupar_por)
+        stmt_serie = (
+            select(periodo_expr, func.sum(Pago.monto))
+            .select_from(Pago)
+            .join(Factura, Pago.id_factura == Factura.id_factura)
+            .where(*filtros)
+            .group_by(periodo_expr)
+            .order_by(periodo_expr)
+        )
+        serie = [
+            {"periodo": periodo, "monto": Decimal(str(monto))}
+            for periodo, monto in self.db.execute(stmt_serie).all()
+        ]
+
+        return {
+            "total": Decimal(str(total)) if total is not None else Decimal("0.00"),
+            "por_metodo_pago": por_metodo_pago,
+            "serie": serie,
+        }
