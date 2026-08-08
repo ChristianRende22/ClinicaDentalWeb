@@ -7,6 +7,7 @@ from app.api.routes.clinicas import router as clinicas_router
 from app.api.routes.configuracion import router as configuracion_router
 from app.api.routes.consultas import router as consultas_router
 from app.api.routes.consultorios import router as consultorios_router
+from app.api.routes.dashboards import router as dashboards_router
 from app.api.routes.doctores import router as doctores_router
 from app.api.routes.especialidades import router as especialidades_router
 from app.api.routes.facturas import router as facturas_router
@@ -24,6 +25,7 @@ app.include_router(auth_router)
 app.include_router(clinicas_router)
 app.include_router(especialidades_router)
 app.include_router(consultorios_router)
+app.include_router(dashboards_router)
 app.include_router(metodos_pago_router)
 app.include_router(horarios_router)
 app.include_router(configuracion_router)
