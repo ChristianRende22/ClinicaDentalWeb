@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.models import Factura, MetodoPago, Pago
 
@@ -46,14 +46,31 @@ class PagoRepository:
         proposito por eficiencia (ver seccion 2.4 del spec del Modulo 7). La
         verificacion Docker/MySQL antes de cerrar el modulo prueba
         explicitamente 'semana' y 'mes' contra MySQL real.
+
+        'semana' usa la fecha del lunes que inicia esa semana como clave, no
+        "anio-numero_de_semana": una clave 'anio-numero_de_semana' mezcla
+        pagos de anios distintos en el limite de anio, porque %W (sqlite) y
+        %u (mysql) numeran las semanas cerca del limite de forma distinta y
+        ninguna de las dos coincide de forma segura con %Y (anio calendario).
+        La fecha del lunes es inequivoca en los dos dialectos.
         """
         dialecto = self.db.bind.dialect.name
         columna = Pago.fecha_pago
-        formatos_sqlite = {"dia": "%Y-%m-%d", "semana": "%Y-%W", "mes": "%Y-%m"}
-        formatos_mysql = {"dia": "%Y-%m-%d", "semana": "%Y-%u", "mes": "%Y-%m"}
-        if dialecto == "sqlite":
-            return func.strftime(formatos_sqlite[agrupar_por], columna)
-        return func.date_format(columna, formatos_mysql[agrupar_por])
+        if agrupar_por == "dia":
+            if dialecto == "sqlite":
+                return func.strftime("%Y-%m-%d", columna)
+            return func.date_format(columna, "%Y-%m-%d")
+        if agrupar_por == "semana":
+            if dialecto == "sqlite":
+                return func.date(columna, "weekday 0", "-6 days")
+            return func.date_sub(func.date(columna), text("INTERVAL WEEKDAY(fecha_pago) DAY"))
+        if agrupar_por == "mes":
+            if dialecto == "sqlite":
+                return func.strftime("%Y-%m", columna)
+            return func.date_format(columna, "%Y-%m")
+        raise ValueError(
+            f"agrupar_por invalido: {agrupar_por!r}, debe ser uno de {AGRUPACIONES_VALIDAS}"
+        )
 
     def totales_por_periodo(
         self,

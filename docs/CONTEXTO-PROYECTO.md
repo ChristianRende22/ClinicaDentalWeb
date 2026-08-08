@@ -590,7 +590,10 @@ directo a los repositorios existentes:
   doctor, en SQL.
 - `PagoRepository.totales_por_periodo(id_clinica, desde=None, hasta=None, agrupar_por="dia")` —
   ingresos **cobrados** (`SUM(Pago.monto)`, no facturado), por método de pago y en una serie
-  temporal agrupable por día/semana/mes.
+  temporal agrupable por día/semana/mes. La `serie` es **sparse, no rellenada**: solo incluye los
+  periodos que tuvieron al menos un pago, no hace zero-fill de los periodos sin actividad (por
+  ejemplo un día sin pagos no aparece con `monto: 0`) — si un cliente necesita un gráfico continuo
+  (con huecos en cero), es responsabilidad suya rellenarlos.
 - `FacturaRepository.listar_pendientes(id_clinica, desde=None, hasta=None)` — facturas en estado
   `pendiente`/`parcial` con su saldo pendiente calculado (`monto_total - SUM(Pago.monto)`).
 
@@ -601,7 +604,11 @@ documenta `CitaRepository._solapadas` (que lo resuelve calculando en Python) —
 riesgo por eficiencia. **Verificado contra MySQL real (2026-08-08):** los tres `agrupar_por`
 (`dia`, `semana`, `mes`) probados por HTTP contra el contenedor real devolvieron `200` con series
 correctas, sin error de SQL — el caso que la suite de SQLite no puede probar porque
-`func.date_format` no existe en SQLite y `func.strftime` no existe en MySQL.
+`func.date_format` no existe en SQLite y `func.strftime` no existe en MySQL. La clave de `semana`
+es la fecha del lunes que inicia esa semana (ej. `"2026-12-28"`), no "año-número_de_semana",
+justamente porque el formato viejo podía mezclar pagos de años distintos en el límite de año — bug
+encontrado y corregido durante la revisión final del módulo, antes de esta re-verificación contra
+Docker/MySQL.
 
 **Permisos, divididos por tipo de métrica, no una regla única** (a diferencia del Módulo 3):
 

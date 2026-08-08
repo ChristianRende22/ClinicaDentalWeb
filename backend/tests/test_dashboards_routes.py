@@ -54,7 +54,6 @@ def test_doctor_ve_solo_sus_propias_citas(client, db_session):
     )
     db_session.commit()
 
-    usuario_doc_a = db_session.get(type(doc_a).id_usuario.class_, doc_a.id_usuario) if False else None
     from app.models import Usuario
 
     usuario_doc_a = db_session.get(Usuario, doc_a.id_usuario)
@@ -206,6 +205,18 @@ def test_asistente_no_puede_ver_facturas_pendientes(client, db_session):
     clinica = crear_clinica(db_session)
     db_session.commit()
     headers = headers_de(db_session, clinica.id_clinica, RolUsuario.ASISTENTE)
+
+    respuesta = client.get("/dashboard/facturas-pendientes", headers=headers)
+
+    assert respuesta.status_code == 403
+
+
+def test_doctor_no_puede_ver_facturas_pendientes(client, db_session):
+    from app.models import RolUsuario
+
+    clinica = crear_clinica(db_session)
+    db_session.commit()
+    headers = headers_de(db_session, clinica.id_clinica, RolUsuario.DOCTOR)
 
     respuesta = client.get("/dashboard/facturas-pendientes", headers=headers)
 

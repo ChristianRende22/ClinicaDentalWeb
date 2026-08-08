@@ -280,6 +280,98 @@ def test_totales_por_periodo_serie_agrupada_por_dia(db_session):
     assert sum(serie.values()) == Decimal("45.00")
 
 
+def test_totales_por_periodo_serie_agrupada_por_semana(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    # Dos pagos en la misma semana calendario (lunes 2026-08-03 a domingo 2026-08-09).
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "20.00", datetime(2026, 8, 4, 9, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "15.00", datetime(2026, 8, 6, 17, 0), numero="F000002",
+    )
+    # Un pago en la semana siguiente (lunes 2026-08-10).
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "10.00", datetime(2026, 8, 11, 9, 0), numero="F000003",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(
+        clinica.id_clinica, agrupar_por="semana",
+    )
+
+    serie = {fila["periodo"]: fila["monto"] for fila in resultado["serie"]}
+    assert len(serie) == 2
+    assert serie["2026-08-03"] == Decimal("35.00")
+    assert serie["2026-08-10"] == Decimal("10.00")
+
+
+def test_totales_por_periodo_serie_semana_no_mezcla_anios_distintos(db_session):
+    """Regresion: antes del fix, un pago de fin de diciembre y uno de principios
+    de enero del anio siguiente podian caer en la misma clave 'anio-numero_de_semana'.
+    Con la clave = fecha del lunes, quedan en periodos distintos y sin mezclarse.
+    """
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "100.00", datetime(2026, 12, 29, 9, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "5.00", datetime(2026, 1, 5, 9, 0), numero="F000002",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(
+        clinica.id_clinica, agrupar_por="semana",
+    )
+
+    serie = {fila["periodo"]: fila["monto"] for fila in resultado["serie"]}
+    assert len(serie) == 2
+    assert Decimal("100.00") in serie.values()
+    assert Decimal("5.00") in serie.values()
+
+
+def test_totales_por_periodo_serie_agrupada_por_mes(db_session):
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "20.00", datetime(2026, 8, 4, 9, 0), numero="F000001",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "15.00", datetime(2026, 8, 28, 9, 0), numero="F000002",
+    )
+    _crear_factura_con_pago(
+        db_session, clinica.id_clinica, paciente.id_paciente, metodo.id_metodo_pago,
+        "10.00", datetime(2026, 9, 3, 9, 0), numero="F000003",
+    )
+    db_session.commit()
+
+    resultado = PagoRepository(db_session).totales_por_periodo(
+        clinica.id_clinica, agrupar_por="mes",
+    )
+
+    serie = {fila["periodo"]: fila["monto"] for fila in resultado["serie"]}
+    assert len(serie) == 2
+    assert serie["2026-08"] == Decimal("35.00")
+    assert serie["2026-09"] == Decimal("10.00")
+
+
 def test_totales_por_periodo_agrupar_por_invalido_lanza_value_error(db_session):
     from app.repositories.pago_repository import PagoRepository
 

@@ -47,3 +47,14 @@ Ni `DELETE /pacientes/{id}` ni `DELETE`/`PUT /doctores/{id}` capturaban la excep
 chequear nada (mismo patrón que el bug #4). Corregido en
 [[Modulo 5 - Expediente Clinico Avanzado]]. Los tests de repositorio/servicio no lo detectaron
 porque no pasan por las rutas reales — la regresión solo se ve con un test de ruta dedicado.
+
+## 7. Agrupar por "año-número_de_semana" mezcla años distintos en el límite
+`PagoRepository._expr_periodo` agrupaba `agrupar_por="semana"` combinando `%Y` (año calendario)
+con un número de semana (`%W` en SQLite, `%u` en MySQL) — y ninguno de los dos dialectos numera
+las semanas cerca del límite de año de forma que coincida con `%Y`. Un pago del 29 de diciembre
+podía caer en la semana ISO 01 del año siguiente y formatear a la misma clave que un pago de
+principios de enero de ese mismo año calendario, mezclando el dinero de dos años distintos en un
+solo punto de la serie. Encontrado en la revisión final de todo el branch de
+[[Modulo 7 - Dashboards]], antes de que se mergeara. **Fix:** la clave de `semana` pasó
+a ser la fecha del lunes que inicia esa semana (ej. `"2026-12-28"`), inequívoca en los dos
+dialectos, en vez de un par año+número_de_semana.
