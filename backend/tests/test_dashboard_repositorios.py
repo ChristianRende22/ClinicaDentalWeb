@@ -312,3 +312,149 @@ def test_totales_por_periodo_no_mezcla_clinicas(db_session):
     resultado = PagoRepository(db_session).totales_por_periodo(clinica_a.id_clinica)
 
     assert resultado["total"] == Decimal("50.00")
+
+
+def test_listar_pendientes_incluye_pendiente_y_parcial(db_session):
+    from app.repositories.factura_repository import FacturaRepository
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    repo_factura = FacturaRepository(db_session)
+    f_pendiente = repo_factura.crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "100.00", "monto_impuesto": "0.00", "monto_total": "100.00"},
+    )
+    f_parcial = repo_factura.crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000002",
+         "monto_subtotal": "50.00", "monto_impuesto": "0.00", "monto_total": "50.00"},
+    )
+    f_pagada = repo_factura.crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000003",
+         "monto_subtotal": "20.00", "monto_impuesto": "0.00", "monto_total": "20.00"},
+    )
+    db_session.flush()
+    from app.models import EstadoFactura
+
+    PagoRepository(db_session).crear(
+        f_parcial.id_factura, {"id_metodo_pago": metodo.id_metodo_pago, "monto": "20.00"}
+    )
+    f_parcial.estado = EstadoFactura.PARCIAL
+    PagoRepository(db_session).crear(
+        f_pagada.id_factura, {"id_metodo_pago": metodo.id_metodo_pago, "monto": "20.00"}
+    )
+    f_pagada.estado = EstadoFactura.PAGADA
+    db_session.commit()
+
+    resultado = FacturaRepository(db_session).listar_pendientes(clinica.id_clinica)
+
+    ids = {f["id_factura"] for f in resultado["facturas"]}
+    assert ids == {f_pendiente.id_factura, f_parcial.id_factura}
+    assert resultado["resumen"]["cantidad"] == 2
+
+
+def test_listar_pendientes_calcula_saldo_pendiente(db_session):
+    from app.repositories.factura_repository import FacturaRepository
+    from app.repositories.pago_repository import PagoRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica, nombre="Juan", apellido="Perez")
+    metodo = crear_metodo_pago(db_session, clinica.id_clinica)
+    repo_factura = FacturaRepository(db_session)
+    factura = repo_factura.crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "100.00", "monto_impuesto": "0.00", "monto_total": "100.00"},
+    )
+    db_session.flush()
+    PagoRepository(db_session).crear(
+        factura.id_factura, {"id_metodo_pago": metodo.id_metodo_pago, "monto": "30.00"}
+    )
+    from app.models import EstadoFactura
+
+    factura.estado = EstadoFactura.PARCIAL
+    db_session.commit()
+
+    resultado = FacturaRepository(db_session).listar_pendientes(clinica.id_clinica)
+
+    fila = resultado["facturas"][0]
+    assert fila["monto_pagado"] == Decimal("30.00")
+    assert fila["saldo_pendiente"] == Decimal("70.00")
+    assert fila["paciente"] == "Juan Perez"
+    assert resultado["resumen"]["monto_pendiente_total"] == Decimal("70.00")
+
+
+def test_listar_pendientes_sin_pagos(db_session):
+    from app.repositories.factura_repository import FacturaRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    FacturaRepository(db_session).crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "40.00", "monto_impuesto": "0.00", "monto_total": "40.00"},
+    )
+    db_session.commit()
+
+    resultado = FacturaRepository(db_session).listar_pendientes(clinica.id_clinica)
+
+    fila = resultado["facturas"][0]
+    assert fila["monto_pagado"] == Decimal("0.00")
+    assert fila["saldo_pendiente"] == Decimal("40.00")
+
+
+def test_listar_pendientes_filtra_por_fecha_emision(db_session):
+    from app.repositories.factura_repository import FacturaRepository
+
+    clinica = crear_clinica(db_session)
+    paciente = crear_paciente(db_session, clinica.id_clinica)
+    repo = FacturaRepository(db_session)
+    vieja = repo.crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "10.00", "monto_impuesto": "0.00", "monto_total": "10.00"},
+    )
+    vieja.fecha_emision = datetime(2026, 1, 1)
+    nueva = repo.crear(
+        clinica.id_clinica,
+        {"id_paciente": paciente.id_paciente, "numero_factura": "F000002",
+         "monto_subtotal": "10.00", "monto_impuesto": "0.00", "monto_total": "10.00"},
+    )
+    nueva.fecha_emision = datetime(2026, 8, 5)
+    db_session.commit()
+
+    resultado = FacturaRepository(db_session).listar_pendientes(
+        clinica.id_clinica, desde=date(2026, 8, 1), hasta=date(2026, 8, 31),
+    )
+
+    ids = {f["id_factura"] for f in resultado["facturas"]}
+    assert ids == {nueva.id_factura}
+
+
+def test_listar_pendientes_no_mezcla_clinicas(db_session):
+    from app.repositories.factura_repository import FacturaRepository
+
+    clinica_a = crear_clinica(db_session, nombre="Dental A")
+    clinica_b = crear_clinica(db_session, nombre="Dental B")
+    paciente_a = crear_paciente(db_session, clinica_a.id_clinica)
+    paciente_b = crear_paciente(db_session, clinica_b.id_clinica)
+    FacturaRepository(db_session).crear(
+        clinica_a.id_clinica,
+        {"id_paciente": paciente_a.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "10.00", "monto_impuesto": "0.00", "monto_total": "10.00"},
+    )
+    FacturaRepository(db_session).crear(
+        clinica_b.id_clinica,
+        {"id_paciente": paciente_b.id_paciente, "numero_factura": "F000001",
+         "monto_subtotal": "999.00", "monto_impuesto": "0.00", "monto_total": "999.00"},
+    )
+    db_session.commit()
+
+    resultado = FacturaRepository(db_session).listar_pendientes(clinica_a.id_clinica)
+
+    assert resultado["resumen"]["cantidad"] == 1
+    assert resultado["facturas"][0]["monto_total"] == Decimal("10.00")
