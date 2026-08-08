@@ -1,5 +1,6 @@
 from calendar import monthrange
 from datetime import date, datetime, time
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -8,7 +9,8 @@ from app.api.deps import get_current_user, get_doctor_actual, resolve_clinica_id
 from app.db import get_db
 from app.models import Doctor, EstadoCita, RolUsuario, Usuario
 from app.repositories.cita_repository import CitaRepository
-from app.schemas.dashboard import ResumenCitasResponse
+from app.repositories.pago_repository import PagoRepository
+from app.schemas.dashboard import ResumenCitasResponse, ResumenIngresosResponse
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -63,3 +65,19 @@ def resumen_citas(
         id_doctor=id_doctor,
     )
     return ResumenCitasResponse(desde=desde, hasta=hasta, **resumen)
+
+
+@router.get("/ingresos", response_model=ResumenIngresosResponse, dependencies=[Depends(VER_FINANCIERO)])
+def resumen_ingresos(
+    desde: date | None = None,
+    hasta: date | None = None,
+    agrupar_por: Literal["dia", "semana", "mes"] = "dia",
+    id_clinica: int = Depends(resolve_clinica_id),
+    db: Session = Depends(get_db),
+) -> ResumenIngresosResponse:
+    desde, hasta = _completar_rango(desde, hasta)
+
+    resultado = PagoRepository(db).totales_por_periodo(
+        id_clinica, desde=desde, hasta=hasta, agrupar_por=agrupar_por
+    )
+    return ResumenIngresosResponse(desde=desde, hasta=hasta, agrupar_por=agrupar_por, **resultado)
